@@ -8,19 +8,30 @@ import re
 import glob
 
 # --- 0. 定数と基本設定 ---
+# ページの基本設定。これは、他の全てのstコマンドより前に、一度だけ実行する必要があります。
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
 
+# 理論の根幹をなす7つのドメインを定義
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
+
+# UIで表示するための日本語名を定義
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
     'autonomy': '4. 自律・成長', 'finance': '5. 経済', 'leisure': '6. 余暇・心理', 'competition': '7. 競争'
 }
+
+# 「クイック・ログ」モードで表示する材料（要素）を定義
 SHORT_ELEMENTS = {
-    'health': ['睡眠と休息', '身体的な快調さ'], 'relationships': ['親密な関係', '利他性・貢献'],
-    'meaning': ['仕事・学業の充実感', '価値との一致'], 'autonomy': ['自己決定感', '自己成長の実感'],
-    'finance': ['経済的な安心感', '職業的な達成感'], 'leisure': ['心の平穏', '楽しさ・喜び'],
+    'health': ['睡眠と休息', '身体的な快調さ'],
+    'relationships': ['親密な関係', '利他性・貢献'],
+    'meaning': ['仕事・学業の充実感', '価値との一致'],
+    'autonomy': ['自己決定感', '自己成長の実感'],
+    'finance': ['経済的な安心感', '職業的な達成感'],
+    'leisure': ['心の平穏', '楽しさ・喜び'],
     'competition': ['優越感・勝利']
 }
+
+# 「ディープ・ダイブ」モードで表示する材料（要素）を定義
 LONG_ELEMENTS = {
     'health': ['睡眠', '食事', '運動', '身体的快適さ', '感覚的快楽', '性的満足'],
     'relationships': ['家族', 'パートナー・恋愛', '友人', '社会的承認', '利他性・貢献', '共感・繋がり'],
@@ -30,11 +41,16 @@ LONG_ELEMENTS = {
     'leisure': ['心の平穏', '自己肯定感', '創造性の発揮', '感謝', '娯楽・楽しさ', '芸術・自然'],
     'competition': ['優越感・勝利']
 }
+
+# データフレームで使うカラム名をあらかじめ定義
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
+
+# スライダーの判断目安となるヘルプテキストを定義
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 
+# 各材料（要素）の詳細な解説文を定義
 ELEMENT_DEFINITIONS = {
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。',
     '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
@@ -83,6 +99,8 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。',
     '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
+
+# UIガイド（エキスパンダー）用のテキストを定義
 EXPANDER_TEXTS = {
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
@@ -290,6 +308,7 @@ def show_welcome_and_guide():
     """)
     st.markdown("---")
 
+
 # --- 2. アプリケーションのUIとロジック ---
 st.title(f'🧭 Harmony Navigator (MVP v1.2.1)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
@@ -299,6 +318,7 @@ if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
 auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
 existing_users = get_existing_users()
+
 if auth_mode == "ログイン":
     if not existing_users:
         st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
@@ -396,7 +416,6 @@ if st.session_state.get('username'):
                             s_element_values[f's_element_{element}'] = score
                         if element_scores:
                             s_values[domain] = int(np.mean(element_scores))
-                            st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点")
 
         with col2:
             domain = 'competition'
@@ -408,8 +427,7 @@ if st.session_state.get('username'):
                     score = st.slider(elements_to_show[0], 0, 100, default_val, key=f"s_element_{elements_to_show[0]}", help=element_help_text)
                     s_values[domain] = score
                     s_element_values[f's_element_{elements_to_show[0]}'] = score
-                    st.metric(label=f"充足度", value=f"{s_values[domain]} 点")
-        
+
         st.subheader('2. 総合的な幸福感 (Gt) は？')
         with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
         g_happiness = st.slider('', 0, 100, 50, label_visibility="collapsed", help=SLIDER_HELP_TEXT)
@@ -438,7 +456,6 @@ if st.session_state.get('username'):
             df_data.to_csv(CSV_FILE, index=False)
             st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を保存（または上書き）しました！')
             
-            # --- 【v1.2.1バグ修正】保存後に、計算結果のサマリーを表示 ---
             with st.expander("▼ 保存された記録のサマリー", expanded=True):
                 st.write(f"**総合的幸福感 (G): {g_happiness} 点**")
                 for domain in DOMAINS:
@@ -458,7 +475,12 @@ if st.session_state.get('username'):
         
         st.subheader("📈 期間分析とリスク評価 (RHI)")
         with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
-            st.markdown("""...""")
+            st.markdown("""
+            - **平均調和度 (H̄):** この期間の、あなたの幸福の**平均点**です。
+            - **変動リスク (σ):** 幸福度の**浮き沈みの激しさ**です。値が小さいほど、安定した航海だったことを示します。
+            - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
+            - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、**真の『幸福の実力値』**です。この値が高いほど、あなたの幸福が、持続可能で、逆境に強いことを示します。
+            """)
         
         period_options = [7, 30, 90]
         if len(df_processed) < 7:
@@ -472,9 +494,9 @@ if st.session_state.get('username'):
 
                 st.markdown("##### あなたのリスク許容度を設定")
                 col1, col2, col3 = st.columns(3)
-                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="...")
-                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="...")
-                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="...")
+                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
+                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
+                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
 
                 rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
                 
