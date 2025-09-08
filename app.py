@@ -10,7 +10,7 @@ import hashlib
 
 # --- 0. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-# ... (v1.3.0の定数定義)
+# ... (v1.3.1の定数定義) ...
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -34,10 +34,10 @@ LONG_ELEMENTS = {
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
-USERS_FILE = 'users.csv' # ユーザー情報ファイル
+USERS_FILE = 'users.csv'
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 ELEMENT_DEFINITIONS = {
-    # ... (v1.3.0の全ての材料定義)
+    # ... (v1.3.1の全ての材料定義)
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
@@ -63,7 +63,7 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。', '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
 EXPANDER_TEXTS = {
-    # ... (v1.2.2の全ての解説文)
+    # ... (v1.3.1の全ての解説文)
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
         
@@ -113,8 +113,8 @@ EXPANDER_TEXTS = {
         """
 }
 # --- 1. 計算ロジック & ユーティリティ関数 ---
+# (v1.3.1と同様)
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
-    # ... (v1.2.2のコード)
     df_copy = df.copy()
     if df_copy.empty: return df_copy
     for col in Q_COLS + S_COLS:
@@ -140,7 +140,6 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     return df_copy
 
 def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
-    # ... (v1.2.2のコード)
     if df_processed.empty: return
     latest_record = df_processed.iloc[-1]
     latest_h_normalized = latest_record['H']
@@ -179,7 +178,6 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
                 """)
 
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
-    # ... (v1.2.2のコード)
     if df_period.empty: return {}
     mean_H = df_period['H'].mean()
     std_H = df_period['H'].std(ddof=0)
@@ -195,7 +193,6 @@ def hash_password(password):
 def check_password(password, hashed_password):
     return hash_password(password) == hashed_password
 
-# --- 【v1.3.1バグ修正】users.csvが存在しない場合に、自動で作成する ---
 def load_users():
     if not os.path.exists(USERS_FILE):
         pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
@@ -209,7 +206,7 @@ def get_existing_users():
     return df_users['username'].tolist()
 
 def show_welcome_and_guide():
-    # ... (v1.2.2のウェルカムページ)
+    # ... (v1.3.1のウェルカムページ)
     st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
@@ -296,18 +293,46 @@ def show_welcome_and_guide():
 
 
 # --- 2. アプリケーションのUIとロジック ---
-st.title(f'🧭 Harmony Navigator (MVP v1.3.1)')
+st.title(f'🧭 Harmony Navigator (MVP v1.3.2)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
+# --- 【v1.3.2新機能】管理者用データ一掃機能 ---
+if st.query_params.get("cleanup") == "true":
+    st.header("🧹 管理者用データ一掃モード")
+    st.warning("警告：この操作は、サーバー上の全てのユーザーアカウントと、関連する全ての航海日誌データを、完全に削除します。この操作は取り消せません。")
+    
+    admin_password = st.text_input("実行するには、管理者パスワードを入力してください:", type="password")
+    if st.button("全てのデータを完全に消去する", type="primary"):
+        # 環境変数から管理者パスワードを取得（Streamlit Community CloudのSecretsで設定）
+        correct_password = os.environ.get("ADMIN_PASSWORD", "default_password")
+        if admin_password == correct_password:
+            try:
+                st.write("クリーンアップ処理を開始します...")
+                # ユーザー情報ファイルを削除
+                if os.path.exists(USERS_FILE):
+                    os.remove(USERS_FILE)
+                    st.write(f"- {USERS_FILE} を削除しました。")
+                # 全てのユーザーデータファイルを削除
+                user_data_files = glob.glob("harmony_data_*.csv")
+                for f in user_data_files:
+                    os.remove(f)
+                    st.write(f"- {f} を削除しました。")
+                st.success("✅ 全てのデータのクリーンアップが完了しました。")
+                st.balloons()
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
+        else:
+            st.error("管理者パスワードが違います。")
+    st.stop() # 管理者モードの場合は、ここでアプリの実行を終了
+
+# (以降のコードはv1.3.1と同様)
+# ...
 st.sidebar.header("👤 ユーザー認証")
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
-
 df_users = load_users()
 existing_users = df_users['username'].tolist()
-
 auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
-
 if auth_mode == "ログイン":
     if not existing_users:
         st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
@@ -325,7 +350,6 @@ if auth_mode == "ログイン":
                     st.sidebar.error("パスワードが間違っています。")
             else:
                 st.sidebar.error("そのユーザー名は存在しません。")
-
 elif auth_mode == "新規登録":
     new_username_raw = st.sidebar.text_input("新しいユーザー名を入力してください:", key="new_username_input")
     new_password = st.sidebar.text_input("パスワード:", type="password", key="new_password")
@@ -348,15 +372,10 @@ elif auth_mode == "新規登録":
             st.session_state['consent'] = consent
             st.sidebar.success(f"ようこそ、{new_username_safe}さん！登録が完了しました。")
             st.rerun()
-
-# --- メインアプリの表示 ---
 if st.session_state.get('username'):
     username = st.session_state['username']
     CSV_FILE = CSV_FILE_TEMPLATE.format(username)
     st.header(f"ようこそ、{username} さん！")
-
-    # (v1.2.3のデータ読み込み、価値観設定、入力フォーム、保存、ダッシュボード表示のロジック)
-    # ...
     if os.path.exists(CSV_FILE):
         try:
             df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
@@ -385,7 +404,6 @@ if st.session_state.get('username'):
     if not df_data.empty and not df_data[df_data['date'] == today].empty: st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
     else: st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
     
-    # --- 【v1.3.1バグ修正】アカウント設定と削除 ---
     with st.sidebar.expander("🔧 アカウント設定"):
         st.write(f"ログイン中のユーザー: **{username}**")
         if st.button("ログアウト"):
@@ -400,10 +418,8 @@ if st.session_state.get('username'):
             user_data_all = load_users()
             user_data = user_data_all[user_data_all['username'] == username].iloc[0]
             if check_password(password_for_delete, user_data['password_hash']):
-                # ユーザー情報ファイルから削除
                 user_data_all = user_data_all[user_data_all['username'] != username]
                 save_users(user_data_all)
-                # データファイルを削除
                 if os.path.exists(CSV_FILE):
                     os.remove(CSV_FILE)
                 st.session_state['username'] = None
