@@ -9,7 +9,7 @@ import glob
 
 # --- 0. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-# ... (v1.2.2の定数定義を全てここにコピー)
+
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -35,11 +35,11 @@ S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 ELEMENT_DEFINITIONS = {
-    # ... (v1.2.2の全ての材料定義)
+    # ... (v1.2.2の全ての材料定義) ...
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
-    '感覚的快楽': '五感を通じて、心地よいと感じる瞬間があった度合い。例：温かいお風呂、心地よい音楽。', '性的満足': '自身の性的な欲求や、パートナーとの親밀さに対して、満足感があった度合い。',
+    '感覚的快楽': '五感を通じて、心地よいと感じる瞬間があった度合い。例：温かいお風呂、心地よい音楽。', '性的満足': '自身の性的な欲求や、パートナーとの親密さに対して、満足感があった度合い。',
     '親密な関係': '家族やパートナー、親しい友人との、温かい、あるいは安心できる繋がりを感じた度合い。', '利他性・貢献': '自分の行動が、誰かの役に立った、あるいは喜ばれたと感じた度合い。例：「ありがとう」と言われた。',
     '家族': '家族との間に、安定した、あるいは温かい関係があった度合い。', 'パートナー・恋愛': 'パートナーとの間に、愛情や深い理解、信頼があった度合い。',
     '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。', '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
@@ -61,7 +61,6 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。', '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
 EXPANDER_TEXTS = {
-    # ... (v1.2.2の全ての解説文)
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
         
@@ -278,8 +277,9 @@ def show_welcome_and_guide():
     """)
     st.markdown("---")
 
+
 # --- 2. アプリケーションのUIとロジック ---
-st.title(f'🧭 Harmony Navigator (MVP v1.2.2)')
+st.title(f'🧭 Harmony Navigator (MVP v1.2.3)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
 st.sidebar.header("👤 ユーザー認証")
@@ -316,27 +316,22 @@ if st.session_state.get('username'):
     CSV_FILE = CSV_FILE_TEMPLATE.format(username)
     st.header(f"ようこそ、{username} さん！")
 
-    # --- 【v1.2.3バグ修正】データ読み込みと移行ロジック ---
     if os.path.exists(CSV_FILE):
-        try:
-            df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
-            df_data['date'] = df_data['date'].dt.date
-            
-            # バージョン互換性チェック
-            if 's_health' not in df_data.columns:
-                st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
-                # 材料スコアからドメインスコアを再計算する
-                for domain, elements in LONG_ELEMENTS.items():
-                    element_cols = [f's_element_{e}' for e in elements if f's_element_{e}' in df_data.columns]
-                    if element_cols:
-                        df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
-                # 念のため、不足しているカラムをNaNで埋める
-                for col in S_COLS:
-                    if col not in df_data.columns:
-                        df_data[col] = 50 # デフォルト値
-        except Exception as e:
-            st.error(f"データファイルの読み込み中にエラーが発生しました: {e}")
-            df_data = pd.DataFrame() # 空のデータフレームで続行
+        df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
+        df_data['date'] = df_data['date'].dt.date
+        
+        # --- 【v1.2.3新機能】データ移行（マイグレーション）ロジック ---
+        if 's_health' not in df_data.columns:
+            st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
+            for domain in DOMAINS:
+                element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
+                if element_cols:
+                    # 材料スコアからドメインスコアを再計算
+                    df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
+            # 念のため、不足しているカラムをNaNで埋める
+            for col in S_COLS:
+                if col not in df_data.columns:
+                    df_data[col] = 50 # デフォルト値
     else:
         columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
         for _, elements in LONG_ELEMENTS.items():
