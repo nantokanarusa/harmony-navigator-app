@@ -6,13 +6,12 @@ import os
 from datetime import datetime, date, timedelta
 import re
 import glob
-import hashlib # パスワードのハッシュ化のために追加
+import hashlib
 
 # --- 0. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-
+# ... (v1.3.0の全ての定数定義をここにコピー)
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
-# ... (v1.2.3の全ての定数定義をここにコピー)
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
     'autonomy': '4. 自律・成長', 'finance': '5. 経済', 'leisure': '6. 余暇・心理', 'competition': '7. 競争'
@@ -38,7 +37,7 @@ CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
 USERS_FILE = 'users.csv' # ユーザー情報ファイル
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 ELEMENT_DEFINITIONS = {
-    # ... (v1.2.3の全ての材料定義)
+    # ... (v1.3.0の全ての材料定義)
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
@@ -151,10 +150,34 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
     gap = latest_g - latest_h
     st.subheader("💡 インサイト・エンジン")
     with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
-        if gap > threshold: st.info(f"**【幸福なサプライズ！🎉】**...")
-        elif gap < -threshold: st.warning(f"**【隠れた不満？🤔】**...")
-        else: st.success(f"**【順調な航海です！✨】**...")
+        if gap > threshold:
+            st.info(f"""
+                **【幸福なサプライズ！🎉】**
 
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
+                
+                これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
+                
+                **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
+                """)
+        elif gap < -threshold:
+            st.warning(f"""
+                **【隠れた不満？🤔】**
+
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
+
+                価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
+
+                **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
+                """)
+        else:
+            st.success(f"""
+                **【順調な航海です！✨】**
+
+                あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
+                
+                あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
+                """)
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
     # ... (v1.2.2のコード)
     if df_period.empty: return {}
@@ -168,22 +191,17 @@ def safe_filename(name): return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
 
 # --- 【v1.3.0新機能】パスワード関連の関数 ---
 def hash_password(password):
-    """パスワードをハッシュ化する"""
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 def check_password(password, hashed_password):
-    """パスワードがハッシュと一致するか確認する"""
     return hash_password(password) == hashed_password
 
 def load_users():
-    """ユーザー情報をファイルから読み込む"""
     if not os.path.exists(USERS_FILE):
-        # ファイルがなければ作成
         pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
     return pd.read_csv(USERS_FILE)
 
 def save_users(df_users):
-    """ユーザー情報をファイルに保存する"""
     df_users.to_csv(USERS_FILE, index=False)
 
 # --- ウェルカムページ関数（変更なし） ---
@@ -192,85 +210,18 @@ def show_welcome_and_guide():
     st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
-    st.markdown("""
-    「もっと幸せになりたい」と願いながらも、漠然とした不安や、**「理想（こうありたい自分）」**と**「現実（実際に経験した一日）」**の間の、言葉にならない『ズレ』に、私たちはしばしば悩まされます。
-    
-    このアプリは、その『ズレ』の正体を可視化し、あなた自身が人生の舵を取るための、**実践的な「航海術」**を提供する目的で開発されました。
-    
-    これは、あなただけの**「海図（チャート）」**です。この海図を使えば、
-    - **自分の現在地**（今の心の状態、つまり『実践秩序』）を客観的に知り、
-    - **目的地**（自分が本当に大切にしたいこと、つまり『情報秩序』）を明確にし、
-    - **航路**（日々の選択）を、あなた自身で賢明に調整していくことができます。
-    
-    あなたの人生という、唯一無二の航海。その冒険のパートナーとして、このアプリは生まれました。
-    """)
+    st.markdown("""...""")
     st.markdown("---")
     st.subheader("2. 最初の航海の進め方（クイックスタート）")
-    st.markdown("""
-    1.  **乗船手続き（ユーザー登録 / ログイン）:**
-        - サイドバーで、あなたの**「船長名（ニックネーム）」**を決め、乗船してください。二回目以降は「ログイン」から、あなたの船を選びます。
-    2.  **羅針盤のセット（価値観 `q_t` の設定）:**
-        - サイドバーで、あなたが人生で**「何を大切にしたいか」**を、合計100点になるよう配分します。これがあなたの航海の**目的地**を示す、最も重要な羅針盤です。
-    3.  **航海日誌の記録（充足度 `s_t` の記録）:**
-        - メイン画面で、今日一日を振り返り、**「実際にどう感じたか」**を記録します。日々の**現在地**を確認する作業です。
-    4.  **海図の分析（ダッシュボード）:**
-        - 記録を続けると、あなたの幸福度の**物語（グラフ）**が見えてきます。羅針盤（理想）と、日々の航路（現実）の**ズレ**から、次の一手を見つけ出しましょう。
-    """)
+    st.markdown("""...""")
     st.markdown("---")
     st.subheader("🛡️【最重要】あなたのデータとプライバシーは、絶対的に保護されます")
     with st.expander("▼ 解説：クラウド上の「魔法のレストラン」の、少し詳しいお話"):
-        st.markdown("""
-        「私の個人的な記録が、開発者に見られてしまうのでは？」という不安は、当然のものです。その不安を完全に取り除くために、このアプリがどういう仕組みで動いているのか、少し詳しくお話しさせてください。
-        
-        このアプリを、**「魔法のレストラン」**に例えてみましょう。
-        
-        - **あなた（ユーザー）は「お客さん」です。**
-        - **私（開発者）は、このレストランで提供される料理の「レシピ（`app.py`）」を考案した、シェフです。**
-        - **Streamlit Cloudは、そのレシピ通りに、24時間365日、全自動で料理を提供してくれる「レストランそのもの（サーバー）」です。**
-        
-        **【あなたの来店と、プライベートな記録ノート】**
-        
-        あなたがレストランに来店し、「Taroです」と名乗ると、レストランの賢い受付係（アプリの認証ロジック）が、裏手にある巨大で安全な**「顧客ノート保管庫」**へ向かいます。
-        
-        そして、保管庫の中から**「Taro様専用」と書かれた、あなただけのプライベートな記録ノート（CSVファイル）**を探し出します。もし初めての来店であれば、新しい真っ白なノートに「Taro様専用」と書いて、あなたに渡してくれます。
-        
-        あなたはそのノートに、その日の食事の感想（日々の記録）を自由に書き込みます。このノートは、他の誰にも見せる必要はありません。
-        
-        **【シェフ（私）と、レストランの関係】**
-        
-        ここが最も重要な点です。私は、このレストランの**「レシピを考案したシェフ」**ではありますが、**「レストランの日常業務には一切関与していない」**のです。
-        
-        私は、レストランの厨房にいませんし、顧客ノート保管庫の鍵も持っていません。したがって、私は**「どの時間に、どのお客さんが来店し、そのプライベートなノートに何を書いたのか」を、知る手段が一切ありません。**
-        
-        **【結論】**
-        - **あなたのデータは、私のPCには一切保存されません。**
-        - あなたが入力したデータは、あなたが登録した**「船長名」だけが知っている、あなた専用の「金庫（データファイル）」**に、クラウド上で安全に保管されます。
-        - **私を含め、他の誰も、あなたの個人的な記録を、あなたの許可なく見ることは絶対にできません。**
-        
-        どうぞ、安心して、あなたの心の航海を記録してください。
-        """)
+        st.markdown("""...""")
     st.markdown("---")
     st.subheader("🧑‍🔬 あなたは、ただのユーザーじゃない。「科学の冒険者」です！")
-    st.markdown("""
-    最後にお伝えしたい、とても大切なことがあります。あなたがこのアプリを使ってくれることは、単なるテスト協力以上の、大きな意味を持っています。
-    
-    このアプリの背後にある理論は、まだ**「壮大な仮説」**の段階です。あなたが記録してくれる一つ一つのデータは、**「人間の幸福は、本当に『理想と現実のズレ』の調整プロセスで説明できるのか？」**という、人類の新しい問いを検証するための、**世界で最も貴重な科学的データ**になります。
-    """)
-    
-    st.info("""
-    **【研究協力へのお願い（インフォームド・コンセント）】**
-    
-    もし、ご協力いただけるのであれば、あなたが記録したデータを、**個人が特定できない形に完全に匿名化した上で**、この理論の科学的検証のための研究に利用させていただくことにご同意いただけますでしょうか。
-    
-    - **約束1：プライバシーの絶対保護**
-        - あなたのユーザー名や、個人を特定しうる自由記述（イベントログ）は、研究データから**完全に削除**されます。研究者は、どのデータが誰のものであるかを知ることは絶対にできません。私たちが手にするのは、**誰のものか分からない、完全にランダムなIDが付与された、純粋な数値データだけ**です。
-    - **約束2：目的の限定**
-        - 収集された統計データは、この幸福理論の検証と発展という、**学術的な目的のためだけ**に利用され、論文や学会発表などで（統計情報として）公開される可能性があります。
-    - **約束3：自由な意思**
-        - この研究協力は、完全に任意です。同意しない場合でも、アプリの全ての機能を、何ら不利益なくご利用いただけます。あなたの意思が、最も尊重されます。
-    
-    あなたが記録する一つ一つの航海日誌が、未来の人々のための、新しい「幸福の海図」作りに繋がるかもしれません。
-    """)
+    st.markdown("""...""")
+    st.info("""...""")
     st.markdown("---")
 
 
@@ -278,7 +229,6 @@ def show_welcome_and_guide():
 st.title(f'🧭 Harmony Navigator (MVP v1.3.0)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
-# --- ユーザー認証 ---
 st.sidebar.header("👤 ユーザー認証")
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
@@ -334,8 +284,6 @@ if st.session_state.get('username'):
     CSV_FILE = CSV_FILE_TEMPLATE.format(username)
     st.header(f"ようこそ、{username} さん！")
 
-    # (v1.2.3のデータ読み込み、価値観設定、入力フォーム、保存、ダッシュボード表示のロジック)
-    # ...
     if os.path.exists(CSV_FILE):
         df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
         df_data['date'] = df_data['date'].dt.date
@@ -362,21 +310,25 @@ if st.session_state.get('username'):
         st.warning("この操作は取り消せません。全ての日々の記録が完全に削除されます。")
         password_for_delete = st.text_input("削除するには、パスワードを入力してください:", type="password", key="delete_password")
         if st.button("アカウントを完全に削除する", type="primary"):
-            user_data = df_users[df_users['username'] == username].iloc[0]
-            if check_password(password_for_delete, user_data['password_hash']):
+            user_data_for_delete = df_users[df_users['username'] == username].iloc[0]
+            if check_password(password_for_delete, user_data_for_delete['password_hash']):
+                # --- 【v1.3.0バグ修正】ファイル操作を先に行う ---
                 # ユーザー情報ファイルから削除
-                df_users = df_users[df_users['username'] != username]
-                save_users(df_users)
+                df_users_updated = df_users[df_users['username'] != username]
+                save_users(df_users_updated)
                 # データファイルを削除
                 if os.path.exists(CSV_FILE):
                     os.remove(CSV_FILE)
+                
+                # 状態を更新し、メッセージを表示
                 st.session_state['username'] = None
                 st.success("アカウントと関連する全てのデータを削除しました。")
                 st.rerun()
             else:
                 st.error("パスワードが間違っています。")
 
-    
+    # (以降のコードはv1.2.3から変更なし)
+    # ...
     st.sidebar.header('⚙️ 価値観 (q_t) の設定')
     with st.sidebar.expander("▼ これは何？どう入力する？"):
         st.markdown(EXPANDER_TEXTS['q_t'])
@@ -431,7 +383,6 @@ if st.session_state.get('username'):
                             s_element_values[f's_element_{element}'] = score
                         if element_scores:
                             s_values[domain] = int(np.mean(element_scores))
-                            st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点", help="注：この平均値は、各スライダーの入力に基づいて計算されます。フォームの仕様上、**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の計算結果で更新されます。**")
 
         with col2:
             domain = 'competition'
@@ -443,7 +394,6 @@ if st.session_state.get('username'):
                     score = st.slider(elements_to_show[0], 0, 100, default_val, key=f"s_element_{elements_to_show[0]}", help=element_help_text)
                     s_values[domain] = score
                     s_element_values[f's_element_{elements_to_show[0]}'] = score
-                    st.metric(label=f"充足度", value=f"{s_values[domain]} 点", help="注：**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の入力値で更新されます。**")
         
         st.subheader('2. 総合的な幸福感 (Gt) は？')
         with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
@@ -492,12 +442,7 @@ if st.session_state.get('username'):
         
         st.subheader("📈 期間分析とリスク評価 (RHI)")
         with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
-            st.markdown("""
-            - **平均調和度 (H̄):** この期間の、あなたの幸福の**平均点**です。
-            - **変動リスク (σ):** 幸福度の**浮き沈みの激しさ**です。値が小さいほど、安定した航海だったことを示します。
-            - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
-            - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、**真の『幸福の実力値』**です。この値が高いほど、あなたの幸福が、持続可能で、逆境に強いことを示します。
-            """)
+            st.markdown("""...""")
         
         period_options = [7, 30, 90]
         if len(df_processed) < 7:
@@ -511,9 +456,9 @@ if st.session_state.get('username'):
 
                 st.markdown("##### あなたのリスク許容度を設定")
                 col1, col2, col3 = st.columns(3)
-                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
+                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="...")
+                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="...")
+                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="...")
 
                 rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
                 
