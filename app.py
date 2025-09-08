@@ -11,7 +11,7 @@ import itertools
 
 # --- 0. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-# ... (v2.0.0の定数定義) ...
+
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -37,34 +37,56 @@ S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
 USERS_FILE = 'users.csv'
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
+
 ELEMENT_DEFINITIONS = {
-    # ... (v2.0.0の全ての材料定義)
-    '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
-    '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
-    '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
-    '感覚的快楽': '五感を通じて、心地よいと感じる瞬間があった度合い。例：温かいお風呂、心地よい音楽。', '性的満足': '自身の性的な欲求や、パートナーとの親密さに対して、満足感があった度合い。',
-    '親密な関係': '家族やパートナー、親しい友人との、温かい、あるいは安心できる繋がりを感じた度合い。', '利他性・貢献': '自分の行動が、誰かの役に立った、あるいは喜ばれたと感じた度合い。例：「ありがとう」と言われた。',
-    '家族': '家族との間に、安定した、あるいは温かい関係があった度合い。', 'パートナー・恋愛': 'パートナーとの間に、愛情や深い理解、信頼があった度合い。',
-    '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。', '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
-    '共感・繋がり': '他者の気持ちに寄り添ったり、逆に寄り添ってもらったりして、人との深い繋がりを感じた度合い。', '仕事・学業の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
-    '価値との一致': '自分の大切にしている価値観や信念に沿って、行動できたと感じられる度合い。', 'やりがい': '自分の仕事や活動（学業、家事、趣味など）に、意義や目的を感じ、夢中になれた度合い。',
-    '達成感': '何か具体的な目標を達成したり、物事を最後までやり遂げたりする経験があった度合い。', '信念との一致': '自分の「こうありたい」という価値観や、倫理観に沿った行動ができた度合い。',
-    'キャリアの展望': '自分の将来のキャリアに対して、希望や前向きな見通しを持てていた度合い。', '社会への貢献': '自分の活動が、所属するコミュニティや、より大きな社会に対して、良い影響を与えていると感じられた度合い。',
-    '有能感': '自分のスキルや能力を、うまく発揮できているという感覚があった度合い。', '自己決定感': '今日の自分の行動は、自分で決めたと感じられる度合い。',
-    '自己成長の実感': '何かを乗り越え、自分が成長した、あるいは新しいことを学んだと感じた度合い。', '自由・自己決定': '自分の人生における重要な事柄を、他者の圧力ではなく、自分自身の意志で選択・決定できていると感じた度合い。',
-    '挑戦・冒険': '新しいことに挑戦したり、未知の経験をしたりして、刺激や興奮を感じた度合い。', '変化の享受': '環境の変化や、新しい考え方を、ポジティブに受け入れ、楽しむことができた度合い。',
-    '独立・自己信頼': '自分の力で物事に対処できるという、自分自身への信頼感があった度合い。', '好奇心': '様々な物事に対して、知的な好奇心を持ち、探求することに喜びを感じた度合い。',
-    '経済的な安心感': '日々の生活や将来のお金について、過度な心配をせず、安心して過ごせた度合い。', '職業的な達成感': '仕事や学業において、物事をうまくやり遂げた、あるいは目標に近づいたと感じた度合い。',
-    '経済的安定': '「来月の支払いは大丈夫かな…」といった、短期的なお金の心配がない状態。', '経済的余裕': '生活必需品だけでなく、趣味や自己投資など、人生を豊かにすることにもお金を使える状態。',
-    '労働環境': '物理的にも、精神的にも、安全で、健康的に働ける環境があった度合い。', 'ワークライフバランス': '仕事（あるいは学業）と、プライベートな生活との間で、自分が望むバランスが取れていた度合い。',
-    '公正な評価': '自分の働きや成果が、正当に評価され、報酬に反映されていると感じられた度合い。', '職業的安定性': '「この先も、この仕事を続けていけるだろうか」といった、長期的なキャリアや収入に対する不安がない状態。',
-    '心の平穏': '過度な不安やストレスなく、精神的に安定していた度合い。', '楽しさ・喜び': '純粋に「楽しい」と感じたり、笑ったりする瞬間があった度合い。',
-    '自己肯定感': '自分の長所も短所も含めて、ありのままの自分を、肯定的に受け入れることができた度合い。', '創造性の発揮': '何かを創作したり、新しいアイデアを思いついたりして、創造的な喜びを感じた度合い。',
-    '感謝': '日常の小さな出来事や、周りの人々に対して、自然と「ありがたい」という気持ちが湧いた度合い。', '娯楽・楽しさ': '趣味に没頭したり、友人と笑い合ったり、純粋に「楽しい」と感じる時間があった度合い。',
-    '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。', '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
+    '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。',
+    '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
+    '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。',
+    '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
+    '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。',
+    '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
+    '感覚的快楽': '五感を通じて、心地よいと感じる瞬間があった度合い。例：温かいお風呂、心地よい音楽。',
+    '性的満足': '自身の性的な欲求や、パートナーとの親密さに対して、満足感があった度合い。',
+    '親密な関係': '家族やパートナー、親しい友人との、温かい、あるいは安心できる繋がりを感じた度合い。',
+    '利他性・貢献': '自分の行動が、誰かの役に立った、あるいは喜ばれたと感じた度合い。例：「ありがとう」と言われた。',
+    '家族': '家族との間に、安定した、あるいは温かい関係があった度合い。',
+    'パートナー・恋愛': 'パートナーとの間に、愛情や深い理解、信頼があった度合い。',
+    '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。',
+    '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
+    '共感・繋がり': '他者の気持ちに寄り添ったり、逆に寄り添ってもらったりして、人との深い繋がりを感じた度合い。',
+    '仕事・学業の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
+    '価値との一致': '自分の大切にしている価値観や信念に沿って、行動できたと感じられる度合い。',
+    'やりがい': '自分の仕事や活動（学業、家事、趣味など）に、意義や目的を感じ、夢中になれた度合い。',
+    '達成感': '何か具体的な目標を達成したり、物事を最後までやり遂げたりする経験があった度合い。',
+    '信念との一致': '自分の「こうありたい」という価値観や、倫理観に沿った行動ができた度合い。',
+    'キャリアの展望': '自分の将来のキャリアに対して、希望や前向きな見通しを持てていた度合い。',
+    '社会への貢献': '自分の活動が、所属するコミュニティや、より大きな社会に対して、良い影響を与えていると感じられた度合い。',
+    '有能感': '自分のスキルや能力を、うまく発揮できているという感覚があった度合い。',
+    '自己決定感': '今日の自分の行動は、自分で決めたと感じられる度合い。',
+    '自己成長の実感': '何かを乗り越え、自分が成長した、あるいは新しいことを学んだと感じた度合い。',
+    '自由・自己決定': '自分の人生における重要な事柄を、他者の圧力ではなく、自分自身の意志で選択・決定できていると感じた度合い。',
+    '挑戦・冒険': '新しいことに挑戦したり、未知の経験をしたりして、刺激や興奮を感じた度合い。',
+    '変化の享受': '環境の変化や、新しい考え方を、ポジティブに受け入れ、楽しむことができた度合い。',
+    '独立・自己信頼': '自分の力で物事に対処できるという、自分自身への信頼感があった度合い。',
+    '好奇心': '様々な物事に対して、知的な好奇心を持ち、探求することに喜びを感じた度合い。',
+    '経済的な安心感': '日々の生活や将来のお金について、過度な心配をせず、安心して過ごせた度合い。',
+    '職業的な達成感': '仕事や学業において、物事をうまくやり遂げた、あるいは目標に近づいたと感じた度合い。',
+    '経済的安定': '「来月の支払いは大丈夫かな…」といった、短期的なお金の心配がない状態。',
+    '経済的余裕': '生活必需品だけでなく、趣味や自己投資など、人生を豊かにすることにもお金を使える状態。',
+    '労働環境': '物理的にも、精神的にも、安全で、健康的に働ける環境があった度合い。',
+    'ワークライフバランス': '仕事（あるいは学業）と、プライベートな生活との間で、自分が望むバランスが取れていた度合い。',
+    '公正な評価': '自分の働きや成果が、正当に評価され、報酬に反映されていると感じられた度合い。',
+    '職業的安定性': '「この先も、この仕事を続けていけるだろうか」といった、長期的なキャリアや収入に対する不安がない状態。',
+    '心の平穏': '過度な不安やストレスなく、精神的に安定していた度合い。',
+    '楽しさ・喜び': '純粋に「楽しい」と感じたり、笑ったりする瞬間があった度合い。',
+    '自己肯定感': '自分の長所も短所も含めて、ありのままの自分を、肯定的に受け入れることができた度合い。',
+    '創造性の発揮': '何かを創作したり、新しいアイデアを思いついたりして、創造的な喜びを感じた度合い。',
+    '感謝': '日常の小さな出来事や、周りの人々に対して、自然と「ありがたい」という気持ちが湧いた度合い。',
+    '娯楽・楽しさ': '趣味に没頭したり、友人と笑い合ったり、純粋に「楽しい」と感じる時間があった度合い。',
+    '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。',
+    '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
 EXPANDER_TEXTS = {
-    # ... (v2.0.0の全ての解説文)
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
         
@@ -113,10 +135,9 @@ EXPANDER_TEXTS = {
         - **📋 全記録データ:** あなたの航海の**『詳細な航海日誌』**です。
         """
 }
+
 # --- 1. 計算ロジック & ユーティリティ関数 ---
-# (v2.0.0と同様)
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
-    # ... (v2.0.0のコード)
     df_copy = df.copy()
     if df_copy.empty: return df_copy
     for col in Q_COLS + S_COLS:
@@ -142,7 +163,6 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     return df_copy
 
 def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
-    # ... (v2.0.0のコード)
     if df_processed.empty: return
     latest_record = df_processed.iloc[-1]
     latest_h_normalized = latest_record['H']
@@ -151,12 +171,36 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
     gap = latest_g - latest_h
     st.subheader("💡 インサイト・エンジン")
     with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
-        if gap > threshold: st.info(f"**【幸福なサプライズ！🎉】**...")
-        elif gap < -threshold: st.warning(f"**【隠れた不満？🤔】**...")
-        else: st.success(f"**【順調な航海です！✨】**...")
+        if gap > threshold:
+            st.info(f"""
+                **【幸福なサプライズ！🎉】**
+
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
+                
+                これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
+                
+                **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
+                """)
+        elif gap < -threshold:
+            st.warning(f"""
+                **【隠れた不満？🤔】**
+
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
+
+                価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
+
+                **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
+                """)
+        else:
+            st.success(f"""
+                **【順調な航海です！✨】**
+
+                あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
+                
+                あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
+                """)
 
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
-    # ... (v2.0.0のコード)
     if df_period.empty: return {}
     mean_H = df_period['H'].mean()
     std_H = df_period['H'].std(ddof=0)
@@ -164,7 +208,7 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-def safe_filename(name): return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+def safe_filename(name): return re.sub(r'[^a-zA-Z0_9-]', '_', name)
 def hash_password(password): return hashlib.sha256(str.encode(password)).hexdigest()
 def check_password(password, hashed_password): return hash_password(password) == hashed_password
 def load_users():
@@ -196,9 +240,7 @@ def calculate_ahp_weights(comparisons, items):
     
     return (weights * 100).round().astype(int)
 
-# (ウェルカムページ関数はv2.0.0と同様)
 def show_welcome_and_guide():
-    # ... (v2.0.0の完全なコード)
     st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
@@ -287,8 +329,6 @@ def show_welcome_and_guide():
 st.title(f'🧭 Harmony Navigator (MVP v2.0.1)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
-# (ユーザー認証ロジックはv2.0.0と同様)
-# ...
 st.sidebar.header("👤 ユーザー認証")
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
@@ -338,126 +378,99 @@ elif auth_mode == "新規登録":
 if st.session_state.get('username'):
     username = st.session_state['username']
     CSV_FILE = CSV_FILE_TEMPLATE.format(username)
-    st.header(f"ようこそ、{username} さん！")
+    
+    # --- 【v2.1.0】UI刷新：タブの導入 ---
+    tab1, tab2, tab3 = st.tabs(["✍️ 今日の記録", "📊 ダッシュボード", "🔧 設定とガイド"])
 
-    # (データ読み込み、記録状況確認、アカウント設定はv2.0.0と同様)
-    # ...
-    if os.path.exists(CSV_FILE):
-        df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
-        df_data['date'] = df_data['date'].dt.date
-    else:
-        columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
-        for _, elements in LONG_ELEMENTS.items():
-            for element in elements:
-                columns.append(f's_element_{element}')
-        df_data = pd.DataFrame(columns=columns)
-    
-    today = date.today()
-    if not df_data.empty and not df_data[df_data['date'] == today].empty: st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
-    else: st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
-    
-    with st.sidebar.expander("🔧 アカウント設定"):
-        st.write(f"ログイン中のユーザー: **{username}**")
-        if st.button("ログアウト"):
-            st.session_state['username'] = None
-            st.rerun()
+    with tab1: # 今日の記録タブ
+        st.header(f"ようこそ、{username} さん！")
+        if os.path.exists(CSV_FILE):
+            df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
+            df_data['date'] = df_data['date'].dt.date
+        else:
+            columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
+            for _, elements in LONG_ELEMENTS.items():
+                for element in elements:
+                    columns.append(f's_element_{element}')
+            df_data = pd.DataFrame(columns=columns)
         
-        st.markdown("---")
-        st.subheader("アカウント削除")
-        st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
-        password_for_delete = st.text_input("削除するには、パスワードを入力してください:", type="password", key="delete_password")
-        if st.button("このアカウントと全データを完全に削除する", type="primary"):
-            user_data_all = load_users()
-            user_data = user_data_all[user_data_all['username'] == username].iloc[0]
-            if check_password(password_for_delete, user_data['password_hash']):
-                user_data_all = user_data_all[user_data_all['username'] != username]
-                save_users(user_data_all)
-                if os.path.exists(CSV_FILE):
-                    os.remove(CSV_FILE)
-                st.session_state['username'] = None
-                st.success("アカウントと関連する全てのデータを削除しました。")
+        today = date.today()
+        
+        st.sidebar.subheader('クイックアクセス')
+        if not df_data.empty and not df_data[df_data['date'] == today].empty: 
+            st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
+        else: 
+            st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
+        st.sidebar.divider()
+        
+        st.sidebar.header('⚙️ 価値観 (q_t) の設定')
+        st.sidebar.caption('あなたの「理想のコンパス」です。')
+        
+        if 'wizard_mode' not in st.session_state: st.session_state.wizard_mode = False
+        if 'q_wizard_step' not in st.session_state: st.session_state.q_wizard_step = 0
+        if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
+        if 'q_values_from_wizard' not in st.session_state: st.session_state.q_values_from_wizard = None
+
+        with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
+            st.markdown("""
+            合計100点の配分、難しいですよね？
+            
+            そんなあなたのために、簡単な質問に答えるだけで、あなたの価値観の**『たたき台』**を自動で提案する機能を用意しました。
+            """)
+            if st.button("対話で価値観を発見する（21の質問）"):
+                st.session_state.wizard_mode = True
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
                 st.rerun()
+        if st.session_state.wizard_mode:
+            pairs = list(itertools.combinations(DOMAINS, 2))
+            if st.session_state.q_wizard_step > 0 and st.session_state.q_wizard_step <= len(pairs):
+                pair = pairs[st.session_state.q_wizard_step - 1]
+                domain1, domain2 = pair
+                
+                st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
+                st.sidebar.write("あなたの人生がより充実するために、今、**より重要**なのはどちらですか？")
+                
+                col1, col2 = st.sidebar.columns(2)
+                if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
+                    st.session_state.q_comparisons[pair] = domain1
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
+                if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
+                    st.session_state.q_comparisons[pair] = domain2
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
             else:
-                st.error("パスワードが間違っています。")
-
-    # --- 【v2.0.1】価値観発見ウィザードのUI改善 ---
-    st.sidebar.header('⚙️ 価値観 (q_t) の設定')
-    st.sidebar.caption('あなたの「理想のコンパス」です。')
-    
-    # セッション状態の初期化
-    if 'wizard_mode' not in st.session_state:
-        st.session_state.wizard_mode = False
-    if 'q_wizard_step' not in st.session_state:
-        st.session_state.q_wizard_step = 0
-    if 'q_comparisons' not in st.session_state:
-        st.session_state.q_comparisons = {}
-    if 'q_values_from_wizard' not in st.session_state:
-        st.session_state.q_values_from_wizard = None
-
-    # ウィザードへの入り口を、より親切に
-    with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
-        st.markdown("""
-        合計100点の配分、難しいですよね？
-        
-        そんなあなたのために、簡単な質問に答えるだけで、あなたの価値観の**『たたき台』**を自動で提案する機能を用意しました。
-        """)
-        if st.button("対話で価値観を発見する（21の質問）"):
-            st.session_state.wizard_mode = True
-            st.session_state.q_wizard_step = 1
-            st.session_state.q_comparisons = {}
-            st.rerun()
-
-    if st.session_state.wizard_mode:
-        pairs = list(itertools.combinations(DOMAINS, 2))
-        if st.session_state.q_wizard_step > 0 and st.session_state.q_wizard_step <= len(pairs):
-            pair = pairs[st.session_state.q_wizard_step - 1]
-            domain1, domain2 = pair
-            
-            st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
-            st.sidebar.write("あなたの人生がより充実するために、今、**より重要**なのはどちらですか？")
-            
-            col1, col2 = st.sidebar.columns(2)
-            if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
-                st.session_state.q_comparisons[pair] = domain1
-                st.session_state.q_wizard_step += 1
-                st.rerun()
-            if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
-                st.session_state.q_comparisons[pair] = domain2
-                st.session_state.q_wizard_step += 1
+                st.sidebar.success("診断完了！あなたの価値観の推定値です。")
+                estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
+                diff = 100 - np.sum(estimated_weights)
+                estimated_weights[np.argmax(estimated_weights)] += diff
+                
+                st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
+                st.session_state.wizard_mode = False
                 st.rerun()
         else:
-            st.sidebar.success("診断完了！あなたの価値観の推定値です。")
-            estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
-            diff = 100 - np.sum(estimated_weights)
-            estimated_weights[np.argmax(estimated_weights)] += diff
+            if st.session_state.q_values_from_wizard is not None:
+                default_q_values = st.session_state.q_values_from_wizard
+                st.session_state.q_values_from_wizard = None
+            elif not df_data.empty and all(col in df_data.columns for col in Q_COLS):
+                default_q_values = {d.replace('q_',''): val * 100 for d, val in df_data[Q_COLS].iloc[-1].to_dict().items()}
+            else:
+                default_q_values = {
+                    'health': 15, 'relationships': 15, 'meaning': 15, 
+                    'autonomy': 15, 'finance': 15, 'leisure': 15, 'competition': 10
+                }
+
+            q_values = {}
+            for i, domain in enumerate(DOMAINS):
+                q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
             
-            st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
-            st.session_state.wizard_mode = False
-            st.rerun()
-    else:
-        if st.session_state.q_values_from_wizard is not None:
-            default_q_values = st.session_state.q_values_from_wizard
-            st.session_state.q_values_from_wizard = None # 一度使ったらクリア
-        elif not df_data.empty and all(col in df_data.columns for col in Q_COLS):
-            default_q_values = {d: val * 100 for d, val in df_data[Q_COLS].iloc[-1].to_dict().items()}
-        else:
-            default_q_values = {
-                'health': 15, 'relationships': 15, 'meaning': 15, 
-                'autonomy': 15, 'finance': 15, 'leisure': 15, 'competition': 10
-            }
+            q_total = sum(q_values.values())
+            st.sidebar.metric(label="現在の合計値", value=q_total)
+            if q_total != 100: st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+            else: st.sidebar.success("合計は100です。入力準備OK！")
 
-        q_values = {}
-        for i, domain in enumerate(DOMAINS):
-            q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, default_q_values.get('q_'+domain, 14))), key=f"q_{domain}")
-        
-        q_total = sum(q_values.values())
-        st.sidebar.metric(label="現在の合計値", value=q_total)
-        if q_total != 100: st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-        else: st.sidebar.success("合計は100です。入力準備OK！")
-
-        # (以降のメイン画面、データ保存、ダッシュボード表示はv2.0.0と同様)
-        # ...
-        st.header('✍️ 今日の航海日誌を記録する')
+        st.subheader('今日の航海日誌を記録する')
         with st.expander("▼ これは、何のために記録するの？"): st.markdown(EXPANDER_TEXTS['s_t'])
         st.markdown("##### 記録する日付")
         target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=7), max_value=today, label_visibility="collapsed")
@@ -468,7 +481,7 @@ if st.session_state.get('username'):
         else: active_elements = LONG_ELEMENTS; mode_string = 'deep'
         
         with st.form(key='daily_input_form'):
-            st.subheader(f'1. 今日の充足度 (s_t) は？ - {input_mode.split("（")[0]}')
+            st.markdown(f'**{input_mode.split("（")[0]}**')
             s_values, s_element_values = {}, {}
             col1, col2 = st.columns(2)
             domain_containers = {'health': col1, 'relationships': col1, 'meaning': col1, 'autonomy': col2, 'finance': col2, 'leisure': col2}
@@ -482,7 +495,7 @@ if st.session_state.get('username'):
                 with container:
                     elements_to_show = active_elements.get(domain, [])
                     if elements_to_show:
-                        with st.expander(f"**{DOMAIN_NAMES_JP[domain]}** - クリックして詳細入力"):
+                        with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**"):
                             element_scores = []
                             for element in elements_to_show:
                                 default_val = int(latest_s_elements.get(f's_element_{element}', 50))
@@ -492,24 +505,22 @@ if st.session_state.get('username'):
                                 s_element_values[f's_element_{element}'] = score
                             if element_scores:
                                 s_values[domain] = int(np.mean(element_scores))
-                                st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点", help="注：この平均値は、各スライダーの入力に基づいて計算されます。フォームの仕様上、**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の計算結果で更新されます。**")
-
             with col2:
                 domain = 'competition'
                 elements_to_show = active_elements.get(domain, [])
                 if elements_to_show:
-                    with st.expander(f"**{DOMAIN_NAMES_JP[domain]}** - クリックして詳細入力"):
+                    with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**"):
                         default_val = int(latest_s_elements.get(f's_element_{elements_to_show[0]}', 50))
                         element_help_text = ELEMENT_DEFINITIONS.get(elements_to_show[0], "")
                         score = st.slider(elements_to_show[0], 0, 100, default_val, key=f"s_element_{elements_to_show[0]}", help=element_help_text)
                         s_values[domain] = score
                         s_element_values[f's_element_{elements_to_show[0]}'] = score
-                        st.metric(label=f"充足度", value=f"{s_values[domain]} 点", help="注：**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の入力値で更新されます。**")
             
-            st.subheader('2. 総合的な幸福感 (Gt) は？')
+            st.divider()
+            st.markdown('**総合的な幸福感 (Gt)**')
             with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
             g_happiness = st.slider('', 0, 100, 50, label_visibility="collapsed", help=SLIDER_HELP_TEXT)
-            st.subheader('3. 今日の出来事や気づきは？')
+            st.markdown('**今日の出来事や気づきは？**')
             with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
             event_log = st.text_area('', height=100, label_visibility="collapsed")
             submitted = st.form_submit_button('今日の記録を保存する')
@@ -540,11 +551,13 @@ if st.session_state.get('username'):
                 st.balloons()
                 st.rerun()
 
+    with tab2: # ダッシュボードタブ
         st.header('📊 あなたの航海チャート')
-        with st.expander("▼ このチャートの見方"): st.markdown(EXPANDER_TEXTS['dashboard'])
+        with st.expander("▼ このチャートの見方"):
+            st.markdown(EXPANDER_TEXTS['dashboard'])
             
         if df_data.empty:
-            st.info('まだ記録がありません。最初の日誌を記録してみましょう！')
+            st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
         else:
             df_processed = calculate_metrics(df_data.fillna(0).copy())
             
@@ -586,7 +599,39 @@ if st.session_state.get('username'):
             st.line_chart(df_processed_chart.rename(columns={'H': '調和度 (H)'}), x='date', y='H')
             st.subheader('全記録データ')
             st.dataframe(df_processed.round(2))
-            st.caption('このアプリは、あなたの理論「幸福論と言語ゲーム」のMVPです。')
             
+    with tab3: # 設定とガイドタブ
+        st.header("🔧 設定とガイド")
+        st.subheader("アカウント設定")
+        st.write(f"ログイン中のユーザー: **{username}**")
+        if st.button("ログアウト"):
+            st.session_state['username'] = None
+            st.rerun()
+        
+        st.divider()
+        st.subheader("アカウント削除")
+        st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
+        password_for_delete = st.text_input("削除するには、パスワードを入力してください:", type="password", key="delete_password")
+        if st.button("このアカウントと全データを完全に削除する", type="primary"):
+            df_users = load_users()
+            if username in df_users['username'].values:
+                user_data = df_users[df_users['username'] == username].iloc[0]
+                if check_password(password_for_delete, user_data['password_hash']):
+                    df_users = df_users[df_users['username'] != username]
+                    save_users(df_users)
+                    if os.path.exists(CSV_FILE):
+                        os.remove(CSV_FILE)
+                    st.session_state['username'] = None
+                    st.success("アカウントと関連する全てのデータを削除しました。")
+                    st.rerun()
+                else:
+                    st.error("パスワードが間違っています。")
+            else:
+                st.error("ユーザーが見つかりません。")
+
+        st.divider()
+        st.subheader("このアプリについて")
+        show_welcome_and_guide()
+        
 else:
     show_welcome_and_guide()
