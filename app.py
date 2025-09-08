@@ -61,6 +61,7 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。', '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
 EXPANDER_TEXTS = {
+    # ... (v1.2.2の全ての解説文)
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
         
@@ -317,21 +318,25 @@ if st.session_state.get('username'):
     st.header(f"ようこそ、{username} さん！")
 
     if os.path.exists(CSV_FILE):
-        df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
-        df_data['date'] = df_data['date'].dt.date
-        
-        # --- 【v1.2.3新機能】データ移行（マイグレーション）ロジック ---
-        if 's_health' not in df_data.columns:
-            st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
-            for domain in DOMAINS:
-                element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
-                if element_cols:
-                    # 材料スコアからドメインスコアを再計算
-                    df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
-            # 念のため、不足しているカラムをNaNで埋める
-            for col in S_COLS:
-                if col not in df_data.columns:
-                    df_data[col] = 50 # デフォルト値
+        try:
+            df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
+            df_data['date'] = df_data['date'].dt.date
+            
+            # --- 【v1.2.3新機能】データ移行（マイグレーション）ロジック ---
+            if 's_health' not in df_data.columns:
+                st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
+                for domain in DOMAINS:
+                    element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
+                    if element_cols:
+                        # 材料スコアからドメインスコアを再計算
+                        df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
+                # 念のため、不足しているカラムをNaNで埋める
+                for col in S_COLS:
+                    if col not in df_data.columns:
+                        df_data[col] = 50 # デフォルト値
+        except Exception as e:
+            st.error(f"データファイルの読み込み中にエラーが発生しました: {e}")
+            df_data = pd.DataFrame()
     else:
         columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
         for _, elements in LONG_ELEMENTS.items():
