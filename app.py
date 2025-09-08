@@ -83,7 +83,6 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。',
     '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
-
 EXPANDER_TEXTS = {
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
@@ -162,13 +161,35 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
     latest_h = latest_h_normalized * 100
     gap = latest_g - latest_h
     st.subheader("💡 インサイト・エンジン")
-    with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です"):
+    with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
         if gap > threshold:
-            st.info(f"**【幸福なサプライズ！🎉】**\n\nあなたの**実感（G = {latest_g}点）**は、モデルの計算値（H = {latest_h:.0f}点）を大きく上回りました。\n\nこれは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。\n\n**問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていなかった、予期せぬ喜びの源泉は何だったでしょうか？")
+            st.info(f"""
+                **【幸福なサプライズ！🎉】**
+
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
+                
+                これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
+                
+                **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていなかった、予期せぬ喜びの源泉は何だったでしょうか？
+                """)
         elif gap < -threshold:
-            st.warning(f"**【隠れた不満？🤔】**\n\nあなたの**実感（G = {latest_g}点）**は、モデルの計算値（H = {latest_h:.0f}点）を大きく下回りました。\n\n価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。\n\n**問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？")
+            st.warning(f"""
+                **【隠れた不満？🤔】**
+
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
+
+                価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
+
+                **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
+                """)
         else:
-            st.success(f"**【順調な航海です！✨】**\n\nあなたの**実感（G = {latest_g}点）**と、モデルの計算値（H = {latest_h:.0f}点）は、よく一致しています。\n\nあなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！")
+            st.success(f"""
+                **【順調な航海です！✨】**
+
+                あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
+                
+                あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
+                """)
 
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
     if df_period.empty: return {}
@@ -270,7 +291,7 @@ def show_welcome_and_guide():
     st.markdown("---")
 
 # --- 2. アプリケーションのUIとロジック ---
-st.title(f'🧭 Harmony Navigator (MVP v1.2.0)')
+st.title(f'🧭 Harmony Navigator (MVP v1.2.1)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
 st.sidebar.header("👤 ユーザー認証")
@@ -278,7 +299,6 @@ if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
 auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
 existing_users = get_existing_users()
-
 if auth_mode == "ログイン":
     if not existing_users:
         st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
@@ -350,12 +370,17 @@ if st.session_state.get('username'):
     
     with st.form(key='daily_input_form'):
         st.subheader(f'1. 今日の充足度 (s_t) は？ - {input_mode.split("（")[0]}')
-        s_values, s_element_values = {}, {}
+        
+        s_values = {}
+        s_element_values = {}
+        
         col1, col2 = st.columns(2)
         domain_containers = {'health': col1, 'relationships': col1, 'meaning': col1, 'autonomy': col2, 'finance': col2, 'leisure': col2}
         
-        if not df_data.empty: latest_s_elements = df_data.filter(like='s_element_').iloc[-1]
-        else: latest_s_elements = pd.Series(50, index=[f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
+        if not df_data.empty and any(c.startswith('s_element_') for c in df_data.columns):
+            latest_s_elements = df_data.filter(like='s_element_').iloc[-1]
+        else: 
+            latest_s_elements = pd.Series(50, index=[f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
         
         for domain, container in domain_containers.items():
             with container:
@@ -369,8 +394,9 @@ if st.session_state.get('username'):
                             score = st.slider(element, 0, 100, default_val, key=f"s_element_{element}", help=element_help_text)
                             element_scores.append(score)
                             s_element_values[f's_element_{element}'] = score
-                        s_values[domain] = int(np.mean(element_scores))
-                        st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点")
+                        if element_scores:
+                            s_values[domain] = int(np.mean(element_scores))
+                            st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点")
 
         with col2:
             domain = 'competition'
@@ -387,16 +413,18 @@ if st.session_state.get('username'):
         st.subheader('2. 総合的な幸福感 (Gt) は？')
         with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
         g_happiness = st.slider('', 0, 100, 50, label_visibility="collapsed", help=SLIDER_HELP_TEXT)
+        
         st.subheader('3. 今日の出来事や気づきは？')
         with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
         event_log = st.text_area('', height=100, label_visibility="collapsed")
+        
         submitted = st.form_submit_button('今日の記録を保存する')
 
     if submitted:
         if q_total != 100: st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
         else:
             q_normalized = {f'q_{d}': v / 100.0 for d, v in q_values.items()}
-            s_domain_scores = {f's_{d}': v for d, v in s_values.items()}
+            s_domain_scores = {f's_{d}': s_values.get(d, 0) for d in DOMAINS}
             consent_status = st.session_state.get('consent', False)
             new_record = { 'date': target_date, 'mode': mode_string, 'consent': consent_status, **q_normalized, **s_domain_scores, **s_element_values, 'g_happiness': g_happiness, 'event_log': event_log }
             new_df = pd.DataFrame([new_record])
@@ -409,8 +437,15 @@ if st.session_state.get('username'):
             df_data = df_data.sort_values(by='date').reset_index(drop=True)
             df_data.to_csv(CSV_FILE, index=False)
             st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を保存（または上書き）しました！')
+            
+            # --- 【v1.2.1バグ修正】保存後に、計算結果のサマリーを表示 ---
+            with st.expander("▼ 保存された記録のサマリー", expanded=True):
+                st.write(f"**総合的幸福感 (G): {g_happiness} 点**")
+                for domain in DOMAINS:
+                    st.write(f"- {DOMAIN_NAMES_JP[domain]}: {s_domain_scores.get(domain, 'N/A')} 点")
+
             st.balloons()
-            st.rerun()
+            # st.rerun() # 自動リロードはフィードバック確認の妨げになるため、コメントアウト
 
     st.header('📊 あなたの航海チャート')
     with st.expander("▼ このチャートの見方"):
@@ -421,38 +456,36 @@ if st.session_state.get('username'):
     else:
         df_processed = calculate_metrics(df_data.fillna(0).copy())
         
-        # --- 【v1.2.0新機能】RHIダッシュボードの表示 ---
         st.subheader("📈 期間分析とリスク評価 (RHI)")
-        with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です"):
-            st.markdown("""
-            - **平均調和度 (H̄):** この期間の、あなたの幸福の**平均点**です。
-            - **変動リスク (σ):** 幸福度の**浮き沈みの激しさ**です。値が小さいほど、安定した航海だったことを示します。
-            - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
-            - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、**真の『幸福の実力値』**です。この値が高いほど、あなたの幸福が、持続可能で、逆境に強いことを示します。
-            """)
+        with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
+            st.markdown("""...""")
         
         period_options = [7, 30, 90]
-        selected_period = st.selectbox("分析期間を選択してください（日）:", period_options, index=1)
-        
-        if len(df_processed) >= selected_period:
-            df_period = df_processed.tail(selected_period)
-
-            st.markdown("##### あなたのリスク許容度を設定")
-            col1, col2, col3 = st.columns(3)
-            lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-            gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-            tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
-
-            rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
-            
-            st.markdown("##### 分析結果")
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
-            col2.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
-            col3.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
-            col4.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
+        if len(df_processed) < 7:
+            st.info("期間分析には最低7日分のデータが必要です。記録を続けてみましょう！")
         else:
-            st.warning(f"分析には最低{selected_period}日分のデータが必要です。現在の記録は{len(df_processed)}日分です。")
+            default_index = 1 if len(df_processed) >= 30 else 0
+            selected_period = st.selectbox("分析期間を選択してください（日）:", period_options, index=default_index)
+            
+            if len(df_processed) >= selected_period:
+                df_period = df_processed.tail(selected_period)
+
+                st.markdown("##### あなたのリスク許容度を設定")
+                col1, col2, col3 = st.columns(3)
+                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="...")
+                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="...")
+                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="...")
+
+                rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                
+                st.markdown("##### 分析結果")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
+                col2.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
+                col3.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
+                col4.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
+            else:
+                st.warning(f"分析には最低{selected_period}日分のデータが必要です。現在の記録は{len(df_processed)}日分です。")
 
         analyze_discrepancy(df_processed)
         st.subheader('調和度 (H) の推移')
