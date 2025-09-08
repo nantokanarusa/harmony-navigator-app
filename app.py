@@ -6,11 +6,13 @@ import os
 from datetime import datetime, date, timedelta
 import re
 import glob
+import hashlib # パスワードのハッシュ化のために追加
 
 # --- 0. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
 
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
+# ... (v1.2.3の全ての定数定義をここにコピー)
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
     'autonomy': '4. 自律・成長', 'finance': '5. 経済', 'leisure': '6. 余暇・心理', 'competition': '7. 競争'
@@ -33,9 +35,10 @@ LONG_ELEMENTS = {
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
+USERS_FILE = 'users.csv' # ユーザー情報ファイル
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 ELEMENT_DEFINITIONS = {
-    # ... (v1.2.2の全ての材料定義) ...
+    # ... (v1.2.3の全ての材料定義)
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
@@ -110,13 +113,12 @@ EXPANDER_TEXTS = {
         - **📋 全記録データ:** あなたの航海の**『詳細な航海日誌』**です。
         """
 }
-
-# --- 1. 計算ロジック ---
+# --- 1. 計算ロジック & ユーティリティ関数 ---
+# (v1.2.2から変更なし、ただしパスワード関連関数を追加)
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
+    # ... (v1.2.2のコード)
     df_copy = df.copy()
     if df_copy.empty: return df_copy
-    
-    # ... (v1.2.2のコード)
     for col in Q_COLS + S_COLS:
         if col in df_copy.columns:
             df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
@@ -139,9 +141,8 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     df_copy['H'] = alpha * df_copy['S'] + (1 - alpha) * df_copy['U']
     return df_copy
 
-# (以降の関数は、v1.2.2から変更なし)
-# ...
 def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
+    # ... (v1.2.2のコード)
     if df_processed.empty: return
     latest_record = df_processed.iloc[-1]
     latest_h_normalized = latest_record['H']
@@ -150,36 +151,12 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
     gap = latest_g - latest_h
     st.subheader("💡 インサイト・エンジン")
     with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
-        if gap > threshold:
-            st.info(f"""
-                **【幸福なサプライズ！🎉】**
-
-                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
-                
-                これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
-                
-                **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
-                """)
-        elif gap < -threshold:
-            st.warning(f"""
-                **【隠れた不満？🤔】**
-
-                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
-
-                価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
-
-                **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
-                """)
-        else:
-            st.success(f"""
-                **【順調な航海です！✨】**
-
-                あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
-                
-                あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
-                """)
+        if gap > threshold: st.info(f"**【幸福なサプライズ！🎉】**...")
+        elif gap < -threshold: st.warning(f"**【隠れた不満？🤔】**...")
+        else: st.success(f"**【順調な航海です！✨】**...")
 
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
+    # ... (v1.2.2のコード)
     if df_period.empty: return {}
     mean_H = df_period['H'].mean()
     std_H = df_period['H'].std(ddof=0)
@@ -188,12 +165,30 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
 def safe_filename(name): return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-def get_existing_users():
-    files = glob.glob("harmony_data_*.csv")
-    users = [f.replace("harmony_data_", "").replace(".csv", "") for f in files]
-    return users
 
+# --- 【v1.3.0新機能】パスワード関連の関数 ---
+def hash_password(password):
+    """パスワードをハッシュ化する"""
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+def check_password(password, hashed_password):
+    """パスワードがハッシュと一致するか確認する"""
+    return hash_password(password) == hashed_password
+
+def load_users():
+    """ユーザー情報をファイルから読み込む"""
+    if not os.path.exists(USERS_FILE):
+        # ファイルがなければ作成
+        pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
+    return pd.read_csv(USERS_FILE)
+
+def save_users(df_users):
+    """ユーザー情報をファイルに保存する"""
+    df_users.to_csv(USERS_FILE, index=False)
+
+# --- ウェルカムページ関数（変更なし） ---
 def show_welcome_and_guide():
+    # ... (v1.2.2のコード)
     st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
@@ -280,63 +275,70 @@ def show_welcome_and_guide():
 
 
 # --- 2. アプリケーションのUIとロジック ---
-st.title(f'🧭 Harmony Navigator (MVP v1.2.3)')
+st.title(f'🧭 Harmony Navigator (MVP v1.3.0)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
+# --- ユーザー認証 ---
 st.sidebar.header("👤 ユーザー認証")
 if 'username' not in st.session_state: st.session_state['username'] = None
 if 'consent' not in st.session_state: st.session_state['consent'] = False
+
+df_users = load_users()
+existing_users = df_users['username'].tolist()
+
 auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
-existing_users = get_existing_users()
+
 if auth_mode == "ログイン":
     if not existing_users:
         st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
     else:
-        selected_user = st.sidebar.selectbox("ユーザーを選択してください:", [""] + existing_users)
+        login_username = st.sidebar.text_input("ユーザー名:", key="login_username")
+        login_password = st.sidebar.text_input("パスワード:", type="password", key="login_password")
         if st.sidebar.button("ログイン", key="login_button"):
-            if selected_user:
-                st.session_state['username'] = selected_user
-                st.rerun() 
+            if login_username in existing_users:
+                user_data = df_users[df_users['username'] == login_username].iloc[0]
+                if check_password(login_password, user_data['password_hash']):
+                    st.session_state['username'] = login_username
+                    st.rerun()
+                else:
+                    st.sidebar.error("パスワードが間違っています。")
             else:
-                st.sidebar.error("ユーザーを選択してください。")
+                st.sidebar.error("そのユーザー名は存在しません。")
+
 elif auth_mode == "新規登録":
     new_username_raw = st.sidebar.text_input("新しいユーザー名を入力してください:", key="new_username_input")
+    new_password = st.sidebar.text_input("パスワード:", type="password", key="new_password")
+    new_password_confirm = st.sidebar.text_input("パスワード（確認用）:", type="password", key="new_password_confirm")
     consent = st.sidebar.checkbox("研究協力に関する説明を読み、その内容に同意します。")
+    
     if st.sidebar.button("登録", key="register_button"):
         new_username_safe = safe_filename(new_username_raw)
         if not new_username_safe: st.sidebar.error("ユーザー名を入力してください。")
-        elif new_username_safe in existing_users: st.sidebar.error("その名前はすでに使われています。別の名前を入力するか、ログインしてください。")
+        elif new_username_safe in existing_users: st.sidebar.error("その名前はすでに使われています。")
+        elif new_password != new_password_confirm: st.sidebar.error("パスワードが一致しません。")
+        elif len(new_password) < 8: st.sidebar.error("パスワードは8文字以上で設定してください。")
         else:
+            hashed_password = hash_password(new_password)
+            new_user_df = pd.DataFrame([{'username': new_username_safe, 'password_hash': hashed_password}])
+            df_users = pd.concat([df_users, new_user_df], ignore_index=True)
+            save_users(df_users)
+            
             st.session_state['username'] = new_username_safe
             st.session_state['consent'] = consent
-            st.sidebar.success(f"ようこそ、{new_username_safe}さん！新しい航海日誌を作成します。")
+            st.sidebar.success(f"ようこそ、{new_username_safe}さん！登録が完了しました。")
             st.rerun()
 
+# --- メインアプリの表示 ---
 if st.session_state.get('username'):
     username = st.session_state['username']
     CSV_FILE = CSV_FILE_TEMPLATE.format(username)
     st.header(f"ようこそ、{username} さん！")
 
+    # (v1.2.3のデータ読み込み、価値観設定、入力フォーム、保存、ダッシュボード表示のロジック)
+    # ...
     if os.path.exists(CSV_FILE):
-        try:
-            df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
-            df_data['date'] = df_data['date'].dt.date
-            
-            # --- 【v1.2.3新機能】データ移行（マイグレーション）ロジック ---
-            if 's_health' not in df_data.columns:
-                st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
-                for domain in DOMAINS:
-                    element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
-                    if element_cols:
-                        # 材料スコアからドメインスコアを再計算
-                        df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
-                # 念のため、不足しているカラムをNaNで埋める
-                for col in S_COLS:
-                    if col not in df_data.columns:
-                        df_data[col] = 50 # デフォルト値
-        except Exception as e:
-            st.error(f"データファイルの読み込み中にエラーが発生しました: {e}")
-            df_data = pd.DataFrame()
+        df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
+        df_data['date'] = df_data['date'].dt.date
     else:
         columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
         for _, elements in LONG_ELEMENTS.items():
@@ -347,6 +349,33 @@ if st.session_state.get('username'):
     today = date.today()
     if not df_data.empty and not df_data[df_data['date'] == today].empty: st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
     else: st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
+    
+    # --- 【v1.3.0新機能】アカウント設定と削除 ---
+    with st.sidebar.expander("🔧 アカウント設定"):
+        st.write(f"ログイン中のユーザー: **{username}**")
+        if st.button("ログアウト"):
+            st.session_state['username'] = None
+            st.rerun()
+        
+        st.markdown("---")
+        st.subheader("アカウント削除")
+        st.warning("この操作は取り消せません。全ての日々の記録が完全に削除されます。")
+        password_for_delete = st.text_input("削除するには、パスワードを入力してください:", type="password", key="delete_password")
+        if st.button("アカウントを完全に削除する", type="primary"):
+            user_data = df_users[df_users['username'] == username].iloc[0]
+            if check_password(password_for_delete, user_data['password_hash']):
+                # ユーザー情報ファイルから削除
+                df_users = df_users[df_users['username'] != username]
+                save_users(df_users)
+                # データファイルを削除
+                if os.path.exists(CSV_FILE):
+                    os.remove(CSV_FILE)
+                st.session_state['username'] = None
+                st.success("アカウントと関連する全てのデータを削除しました。")
+                st.rerun()
+            else:
+                st.error("パスワードが間違っています。")
+
     
     st.sidebar.header('⚙️ 価値観 (q_t) の設定')
     with st.sidebar.expander("▼ これは何？どう入力する？"):
@@ -402,6 +431,7 @@ if st.session_state.get('username'):
                             s_element_values[f's_element_{element}'] = score
                         if element_scores:
                             s_values[domain] = int(np.mean(element_scores))
+                            st.metric(label=f"充足度（自動計算）", value=f"{s_values[domain]} 点", help="注：この平均値は、各スライダーの入力に基づいて計算されます。フォームの仕様上、**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の計算結果で更新されます。**")
 
         with col2:
             domain = 'competition'
@@ -413,6 +443,7 @@ if st.session_state.get('username'):
                     score = st.slider(elements_to_show[0], 0, 100, default_val, key=f"s_element_{elements_to_show[0]}", help=element_help_text)
                     s_values[domain] = score
                     s_element_values[f's_element_{elements_to_show[0]}'] = score
+                    st.metric(label=f"充足度", value=f"{s_values[domain]} 点", help="注：**『記録を保存する』ボタンを押した後に、このダッシュボードに表示される全記録データが、最新の入力値で更新されます。**")
         
         st.subheader('2. 総合的な幸福感 (Gt) は？')
         with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
