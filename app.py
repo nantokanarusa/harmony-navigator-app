@@ -400,23 +400,49 @@ def main():
         st.session_state['consent'] = False
 
     users_dataframe = load_users()
-    existing_users = users_dataframe['username'].tolist() if not users_dataframe.empty else []
+
+    # 既存ユーザー名一覧（そのまま保存されている文字列）
+    existing_usernames = users_dataframe['username'].tolist() if not users_dataframe.empty else []
+    # 既存ユーザーを safe にした一覧（ファイル名用）
+    existing_safe_usernames = users_dataframe['username'].apply(safe_filename).tolist() if not users_dataframe.empty else []
 
     auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
 
+    def find_user_row_for_login(login_name: str, users_df: pd.DataFrame):
+        # 1) 完全一致で探す（保存されているそのままの名前と比較）
+        if login_name in users_df['username'].values:
+            return users_df[users_df['username'] == login_name].iloc[0]
+        # 2) 入力名を safe に変換して保存名と比較
+        login_name_safe = safe_filename(login_name)
+        if login_name_safe in users_df['username'].values:
+            return users_df[users_df['username'] == login_name_safe].iloc[0]
+        # 3) 保存されている名前をすべて safe に変換して、入力の safe 名と比較
+        safe_series = users_df['username'].apply(safe_filename)
+        mask = (safe_series == login_name) | (safe_series == login_name_safe)
+        if mask.any():
+            return users_df[mask].iloc[0]
+        # 見つからなかったら None を返す
+        return None
+
     if auth_mode == "ログイン":
-        if not existing_users:
+        if not existing_usernames:
             st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
         else:
             login_username = st.sidebar.text_input("ユーザー名:", key="login_username")
             login_password = st.sidebar.text_input("パスワード:", type="password", key="login_password")
             if st.sidebar.button("ログイン", key="login_button"):
-                if login_username in existing_users:
-                    user_data = users_dataframe[users_dataframe['username'] == login_username].iloc[0]
-                    if check_password(login_password, user_data['password_hash']):
-                        # 表示用のユーザー名は入力されたまま使う
-                        st.session_state['username'] = login_username
-                        st.session_state['username_safe'] = safe_filename(login_username)
+                found_user_row = None
+                try:
+                    found_user_row = find_user_row_for_login(login_username, users_dataframe)
+                except Exception:
+                    found_user_row = None
+
+                if found_user_row is not None:
+                    if check_password(login_password, found_user_row['password_hash']):
+                        # 表示用のユーザー名は、保存されている表示名をそのまま使う
+                        stored_display_name = str(found_user_row['username'])
+                        st.session_state['username'] = stored_display_name
+                        st.session_state['username_safe'] = safe_filename(stored_display_name)
                         st.rerun()
                     else:
                         st.sidebar.error("パスワードが間違っています。")
@@ -433,22 +459,27 @@ def main():
             new_username = new_username_raw.strip()
             if new_username == '':
                 st.sidebar.error("ユーザー名を入力してください。")
-            elif new_username in existing_users:
-                st.sidebar.error("その名前はすでに使われています。")
-            elif new_password != new_password_confirm:
-                st.sidebar.error("パスワードが一致しません。")
-            elif len(new_password) < 8:
-                st.sidebar.error("パスワードは8文字以上で設定してください。")
             else:
-                hashed_password = hash_password(new_password)
-                new_user_row = pd.DataFrame([{'username': new_username, 'password_hash': hashed_password}])
-                users_dataframe = pd.concat([users_dataframe, new_user_row], ignore_index=True)
-                save_users(users_dataframe)
-                st.session_state['username'] = new_username
-                st.session_state['username_safe'] = safe_filename(new_username)
-                st.session_state['consent'] = consent_checkbox
-                st.sidebar.success(f"ようこそ、{new_username}さん！登録が完了しました。")
-                st.rerun()
+                # 既存ユーザーとの重複チェックは safe 名で比較することで
+                # 以前のバージョンで保存された safe 名と衝突するケースにも対応する
+                new_username_safe = safe_filename(new_username)
+                existing_safe_set = set(users_dataframe['username'].apply(safe_filename).tolist()) if not users_dataframe.empty else set()
+                if new_username in users_dataframe['username'].values or new_username_safe in existing_safe_set:
+                    st.sidebar.error("その名前はすでに使われています。別の名前を選んでください。")
+                elif new_password != new_password_confirm:
+                    st.sidebar.error("パスワードが一致しません。")
+                elif len(new_password) < 8:
+                    st.sidebar.error("パスワードは8文字以上で設定してください。")
+                else:
+                    hashed_password = hash_password(new_password)
+                    new_user_row = pd.DataFrame([{'username': new_username, 'password_hash': hashed_password}])
+                    users_dataframe = pd.concat([users_dataframe, new_user_row], ignore_index=True)
+                    save_users(users_dataframe)
+                    st.session_state['username'] = new_username
+                    st.session_state['username_safe'] = new_username_safe
+                    st.session_state['consent'] = consent_checkbox
+                    st.sidebar.success(f"ようこそ、{new_username}さん！登録が完了しました。")
+                    st.rerun()
 
     # --- メインアプリの表示 ---
     if st.session_state.get('username'):
@@ -457,6 +488,9 @@ def main():
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
+        # 以降の処理は既存の実装に従って継続されます。
+        # （ここから下のタブの処理ブロックは、既にドキュメント内に存在する同一のコードをそのまま使用します）
+        
         # --- タブ: 今日の記録 ---
         with tab1:
             st.header(f"ようこそ、{display_username} さん！")
@@ -548,6 +582,7 @@ def main():
                     st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                     st.session_state.wizard_mode = False
                     st.rerun()
+
             else:
                 # 直近の保存値を表示するロジック：保存済みデータがあれば、直近行の q_* を利用してスライダーの初期値を決める
                 if st.session_state.q_values_from_wizard is not None:
