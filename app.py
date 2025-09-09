@@ -406,7 +406,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v4.3.0 - The Transparent Contract / The Absolute Final')
+    st.caption('v4.3.0 - The Transparent Contract')
 
     # セッション状態の初期化
     if 'auth_status' not in st.session_state:
@@ -431,7 +431,7 @@ def main():
         st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
         
         if st.button("はい、安全に保管しました。旅を始める"):
-            st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+            st.session_state.auth_status = "LOGGED_IN_LOCKED"
             st.rerun()
 
     elif st.session_state.auth_status == "LOGGED_IN_LOCKED":
@@ -602,7 +602,7 @@ def main():
                     encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                     
                     consent_record = user_data_df[user_data_df['user_id'] == user_id]
-                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else False
+                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else st.session_state.get('consent', False)
 
                     new_record.update({
                         'user_id': user_id, 'date': target_date, 'mode': mode_string,
@@ -686,9 +686,14 @@ def main():
             st.header("🔧 設定とガイド")
             st.subheader("データのエクスポート")
             if not user_data_df.empty:
-                csv_export = user_data_df.to_csv(index=False).encode('utf-8')
+                # 復号したイベントログを含むデータフレームを作成
+                df_export = user_data_df.copy()
+                if 'event_log' in df_export.columns:
+                    df_export['event_log_decrypted'] = df_export['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                
+                csv_export = df_export.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="📥 全データをダウンロード",
+                    label="📥 全データをダウンロード（イベントログ復号済）",
                     data=csv_export,
                     file_name=f'harmony_data_{user_id}_{datetime.now().strftime("%Y%m%d")}.csv',
                     mime='text/csv',
@@ -782,22 +787,30 @@ def main():
                         st.rerun()
 
         with door2:
-            st.info("すでに「秘密の合い言葉」をお持ちの方は、こちらから旅を続けてください。")
+            st.info("すでに「秘密の合い言葉」と「パスワード」をお持ちの方は、こちらから旅を続けてください。")
             with st.form("login_form"):
                 user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
+                password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
                 submitted = st.form_submit_button("乗船する")
 
                 if submitted:
-                    if user_id_input:
+                    if user_id_input and password_input:
                         users_df = read_data('users')
-                        if not users_df.empty and user_id_input in users_df['user_id'].values:
-                            st.session_state.user_id = user_id_input
-                            st.session_state.auth_status = "LOGGED_IN_LOCKED"
-                            st.rerun()
+                        if not users_df.empty:
+                            user_record = users_df[users_df['user_id'] == user_id_input]
+                            if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
+                                st.session_state.user_id = user_id_input
+                                st.session_state.enc_manager = EncryptionManager(password_input)
+                                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                                st.success("乗船しました！")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("合い言葉またはパスワードが間違っています。")
                         else:
-                            st.error("その合い言葉を持つ船は見つかりませんでした。もう一度確認するか、「新しい船で旅を始める」タブから始めてください。")
+                            st.error("その合い言葉を持つ船は見つかりませんでした。")
                     else:
-                        st.warning("合い言葉を入力してください。")
+                        st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
     main()
