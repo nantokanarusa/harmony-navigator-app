@@ -582,7 +582,6 @@ def main():
                     st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                     st.session_state.wizard_mode = False
                     st.rerun()
-
             else:
                 # 直近の保存値を表示するロジック：保存済みデータがあれば、直近行の q_* を利用してスライダーの初期値を決める
                 if st.session_state.q_values_from_wizard is not None:
@@ -605,9 +604,23 @@ def main():
                 else:
                     default_q_values = {'health': 15, 'relationships': 15, 'meaning': 15, 'autonomy': 15, 'finance': 15, 'leisure': 15, 'competition': 10}
 
+                # スライダーの初期値をセッションステートに設定します。
+                username_safe_for_init = st.session_state.get('username_safe', '')
+                init_flag_key = f"q_values_initialized_for_{username_safe_for_init}"
+                if not st.session_state.get(init_flag_key, False):
+                    for domain in DOMAINS:
+                        key_name = f"q_{domain}"
+                        default_for_domain = int(default_q_values.get(domain, 14))
+                        if key_name not in st.session_state or st.session_state.get(key_name) is None:
+                            st.session_state[key_name] = default_for_domain
+                    st.session_state[init_flag_key] = True
+
+                # 実際のスライダーを表示します。スライダーは session_state の既定値を優先して表示します。
                 q_values = {}
                 for domain in DOMAINS:
-                    q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+                    key_name = f"q_{domain}"
+                    slider_default = st.session_state.get(key_name, int(default_q_values.get(domain, 14)))
+                    q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(slider_default), key=key_name)
 
                 q_total = sum(q_values.values())
                 st.sidebar.metric(label="現在の合計値", value=q_total)
@@ -689,10 +702,17 @@ def main():
                 submitted = st.form_submit_button('今日の記録を保存する')
 
             if submitted:
+                # フォーム送信時に、表示されているスライダーの実際の値を必ず取得するため、
+                # session_state から q_* を再取得して q_values を作り直します。
+                # これにより、ウィザード経由でスライダー表示が変わっていても、保存時に
+                # 画面上の実際の値が確実に保存されます。
+                q_values = {d: int(st.session_state.get(f"q_{d}", 0)) for d in DOMAINS}
+                q_total = sum(q_values.values())
+
                 if q_total != 100:
                     st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
                 else:
-                    # q_values は 0..100 の割合で保存されるため、CSV には 0..1 に正規化した値を保存する
+                    # CSV には 0..1 に正規化した q_* を保存します
                     q_normalized = {f'q_{d}': float(v) / 100.0 for d, v in q_values.items()}
                     s_domain_scores = {f's_{d}': int(s_values.get(d, 0)) for d in DOMAINS}
                     consent_status = st.session_state.get('consent', False)
@@ -829,23 +849,4 @@ def main():
                         except Exception:
                             pass
                         st.session_state['username'] = None
-                        st.session_state['username_safe'] = None
-                        st.success("アカウントと関連する全てのデータを削除しました。")
-                        st.rerun()
-                    else:
-                        st.error("パスワードが間違っています。")
-                else:
-                    st.error("ユーザーが見つかりません。")
-
-            st.markdown('---')
-            st.subheader("このアプリについて")
-            show_welcome_and_guide()
-
-    else:
-        # 未ログイン時には案内を表示
-        show_welcome_and_guide()
-
-
-# --- 3. メイン関数の実行 ---
-if __name__ == "__main__":
-    main()
+  
