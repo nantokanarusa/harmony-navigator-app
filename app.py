@@ -1,4 +1,4 @@
-# app.py (v4.2.1 - The Final Ceremony / The True Final Code)
+# app.py (v4.3.0 - The Transparent Contract / The Absolute Final)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -59,7 +59,7 @@ ELEMENT_DEFINITIONS = {
     '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。',
     '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
     '共感・繋がり': '他者の気持ちに寄り添ったり、逆に寄り添ってもらったりして、人との深い繋がりを感じた度合い。',
-    '仕事・学業の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
+    '仕事・学업の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
     '価値との一致': '自分の大切にしている価値観や信念に沿って、行動できたと感じられる度合い。',
     'やりがい': '自分の仕事や活動（学業、家事、趣味など）に、意義や目的を感じ、夢中になれた度合い。',
     '達成感': '何か具体的な目標を達成したり、物事を最後までやり遂げたりする経験があった度合い。',
@@ -354,11 +354,19 @@ def show_welcome_and_guide():
         st.markdown("""
         このアプリの最も重要な約束は、あなたのプライバシーを守ることです。そのために、私たちは**「二重の仮面」**という、二段階の強力な匿名化・暗号化技術を、設計の中心に据えています。
 
-        #### **第一の仮面：あなたが誰だか、誰にも分からない「診察券番号（ユーザー名）」**
+        #### **第一の仮面：あなたが誰だか、システムさえも知らない「秘密の合い言葉（ユーザーID）」**
 
-        このアプリでは、あなたは、本名やメールアドレスといった、**個人を特定できる情報を一切登録する必要がありません。**
+        このアプリでは、あなたは、本名やメールアドレス、さらにはご自身でニックネームを決めていただくことさえも、一切ありません。**個人を特定できる情報を、あなたが入力するプロセスは、存在しないのです。**
+
+        あなたが初めて「新しい船で旅を始める」を選択した瞬間、**システムが、あなたのためだけに、完全にランダムで、予測不可能な「秘密の合い言葉（ユーザーID）」を自動で生成します。**
         
-        あなたが登録する「ユーザー名」は、あなただけが知っているニックネームです。開発者である私がデータ保管庫を見ることがあったとしても、そこにあるのは**「Taroさんの記録」**という情報だけであり、そのTaroさんが**現実世界の誰なのかを知る手段は、一切ありません。** これが、基本的な匿名性を保証する、第一の仮面です。
+        これは、あなたが病院の受付で受け取る、**名前の書いていない、ただの「整理番号」**のようなものです。
+        
+        開発者である私がデータ保管庫を見ることがあったとしても、そこにあるのは**「整理番号 user_... さんの記録」**という、完全に無機質で、個人とは結びつかない情報だけです。
+        
+        **あなたがご自身でニックネームを決めるプロセスが存在しないため、あなたが誤って個人を特定できる名前（本名やSNSのアカウント名など）を使ってしまうリスクは、構造的にゼロになります。**
+        
+        これにより、私がその番号の持ち主が現実世界の誰なのかを知る手段は、一切ありません。これこそが、**「設計による匿名性」**を保証する、第一の仮面です。
 
         #### **第二の仮面：あなたにしか読めない「魔法の自己破壊インク（イベントログの暗号化）」**
 
@@ -368,7 +376,7 @@ def show_welcome_and_guide():
         
         データ保管庫に記録されるのは、この**「誰にも読めない、暗号化された記号の羅列」だけ**です。
         
-        したがって、たとえ私があなたの「ユーザー名」を知っていたとしても、あなたのイベントログの中身を読むことは、**物理的に、そして永遠に、不可能です。**
+        したがって、たとえ私があなたの「秘密の合い言葉」を知っていたとしても、あなたのイベントログの中身を読むことは、**物理的に、そして永遠に、不可能です。**
         
         この日記を再び読めるのは、世界でただ一人、正しいパスワードという「魔法の鍵」を持つ、**あなただけ**です。
         
@@ -400,7 +408,6 @@ def main():
     st.title('🧭 Harmony Navigator')
     st.caption('v4.2.1 - The Final Ceremony Edition')
 
-    # セッション状態の初期化
     if 'auth_status' not in st.session_state:
         st.session_state.auth_status = "NOT_LOGGED_IN"
     if 'user_id' not in st.session_state:
@@ -411,7 +418,6 @@ def main():
         st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
         st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
 
-    # --- フロー制御 ---
     if st.session_state.auth_status == "AWAITING_ID":
         st.header("【あなたの船が、完成しました】")
         st.success("ようこそ、航海士へ。")
@@ -474,7 +480,7 @@ def main():
             st.session_state.q_wizard_step = 0
         if 'q_comparisons' not in st.session_state:
             st.session_state.q_comparisons = {}
-
+        
         with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
             st.markdown("合計100点の配分は難しいと感じることがあります。簡単な比較質問に答えるだけで、あなたの価値観のたたき台を提案します。")
             if st.button("対話で価値観を発見する（21の質問）"):
@@ -526,6 +532,7 @@ def main():
 
         with tab1:
             st.header(f"今日の航海日誌を記録する")
+            
             with st.expander("▼ これは、何のために記録するの？"):
                 st.markdown(EXPANDER_TEXTS['s_t'])
             
@@ -708,6 +715,11 @@ def main():
                         st.rerun()
                     else:
                         st.error("パスワードが間違っています。")
+            
+            st.markdown("---")
+            st.subheader("このアプリについて")
+            show_welcome_and_guide()
+
     else: # "NOT_LOGGED_IN"
         st.header("ようこそ、航海士へ")
         show_welcome_and_guide()
@@ -717,14 +729,29 @@ def main():
 
         with door1:
             st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
+            st.markdown("---")
+            st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
+            st.warning("""
+            この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています。
+            あなたの日記（イベントログ）は、**あなただけが知る「パスワード」**を鍵として、あなたのブラウザの中で**暗号化**されます。
+            """)
+            st.error("""
+            **【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません。**
+            私たちは、あなたのパスワードを、どこにも保存しません。そのため、従来のサービスのような**「パスワードリセット」機能は、存在しません。**
+            """)
+            st.markdown("---")
+
             with st.form("register_form"):
+                agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
                 new_password = st.text_input("パスワード（8文字以上、全てのデータを守る、あなただけの鍵です）", type="password")
                 new_password_confirm = st.text_input("パスワード（確認用）", type="password")
                 consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
 
                 if submitted:
-                    if len(new_password) < 8:
+                    if not agreement:
+                        st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
+                    elif len(new_password) < 8:
                         st.error("パスワードは8文字以上で設定してください。")
                     elif new_password != new_password_confirm:
                         st.error("パスワードが一致しません。")
@@ -737,6 +764,15 @@ def main():
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
                         write_data('users', updated_users_df)
                         
+                        all_data_df = read_data('data')
+                        new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
+                        all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+                        for col in all_cols_in_order:
+                             if col not in new_user_record.columns:
+                                new_user_record[col] = pd.NA
+                        all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
+                        write_data('data', all_data_df_updated)
+
                         st.session_state.user_id = new_user_id
                         st.session_state.enc_manager = EncryptionManager(new_password)
                         st.session_state.auth_status = "AWAITING_ID"
