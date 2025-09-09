@@ -59,7 +59,7 @@ ELEMENT_DEFINITIONS = {
     '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。',
     '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
     '共感・繋がり': '他者の気持ちに寄り添ったり、逆に寄り添ってもらったりして、人との深い繋がりを感じた度合い。',
-    '仕事・学업の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
+    '仕事・学業の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
     '価値との一致': '自分の大切にしている価値観や信念に沿って、行動できたと感じられる度合い。',
     'やりがい': '自分の仕事や活動（学業、家事、趣味など）に、意義や目的を感じ、夢中になれた度合い。',
     '達成感': '何か具体的な目標を達成したり、物事を最後までやり遂げたりする経験があった度合い。',
@@ -406,8 +406,9 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v4.2.1 - The Final Ceremony Edition')
+    st.caption('v4.3.0 - The Transparent Contract / The Absolute Final')
 
+    # セッション状態の初期化
     if 'auth_status' not in st.session_state:
         st.session_state.auth_status = "NOT_LOGGED_IN"
     if 'user_id' not in st.session_state:
@@ -599,7 +600,9 @@ def main():
                             s_domain_scores['s_' + domain] = pd.NA
                     
                     encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
-                    consent_status = user_data_df['consent'].iloc[-1] if not user_data_df.empty else st.session_state.get('consent', False)
+                    
+                    consent_record = user_data_df[user_data_df['user_id'] == user_id]
+                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else False
 
                     new_record.update({
                         'user_id': user_id, 'date': target_date, 'mode': mode_string,
