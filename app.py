@@ -9,7 +9,8 @@ import glob
 import hashlib
 import itertools
 
-# --- 0. 定数と基本設定 ---
+# --- A. コア理論・計算エンジン要件 ---
+# A-0. 定数と基本設定
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
 
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
@@ -39,7 +40,6 @@ USERS_FILE = 'users.csv'
 SLIDER_HELP_TEXT = "0: 全く当てはまらない\n\n25: あまり当てはまらない\n\n50: どちらとも言えない\n\n75: やや当てはまる\n\n100: 完全に当てはまる"
 
 ELEMENT_DEFINITIONS = {
-    # ... (v2.1.2の全ての材料定義)
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。', '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。', '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。', '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
@@ -65,7 +65,6 @@ ELEMENT_DEFINITIONS = {
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。', '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
 }
 EXPANDER_TEXTS = {
-    # ... (v2.1.2の全ての解説文)
     'q_t': """
         ここでは、あなたが人生で**何を大切にしたいか（理想＝情報秩序）**を数値で表現します。
         
@@ -114,68 +113,51 @@ EXPANDER_TEXTS = {
         - **📋 全記録データ:** あなたの航海の**『詳細な航海日誌』**です。
         """
 }
-# --- 1. 計算ロジック & ユーティリティ関数 ---
+
+# A-1. 指標計算
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     df_copy = df.copy()
-    if df_copy.empty: return df_copy
+    if df_copy.empty:
+        return df_copy
     
-    # ... (v2.1.2のコード)
+    # A-4. データ型保証
     for col in Q_COLS + S_COLS:
         if col in df_copy.columns:
             df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce').fillna(0)
     
+    # A-1-1. Sの計算
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
     q_vectors = df_copy[Q_COLS].values
     df_copy['S'] = np.sum(q_vectors * s_vectors_normalized, axis=1)
     
+    # A-1-2. Uの計算
     def calculate_unity(row):
         q_vec = row[Q_COLS].values
         s_vec_raw = row[S_COLS].values
         s_sum = np.sum(s_vec_raw)
-        if s_sum == 0: return 0.0
+        if s_sum == 0:
+            return 0.0
         s_tilde = s_vec_raw / s_sum
         jsd_sqrt = jensenshannon(q_vec, s_tilde)
         jsd = jsd_sqrt**2
         return 1 - jsd
     
     df_copy['U'] = df_copy.apply(calculate_unity, axis=1)
+    # A-1-3. Hの計算
     df_copy['H'] = alpha * df_copy['S'] + (1 - alpha) * df_copy['U']
     return df_copy
 
-def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
-    # ... (v2.1.2のコード)
-    if df_processed.empty: return
-    latest_record = df_processed.iloc[-1]
-    latest_h_normalized = latest_record['H']
-    latest_g = latest_record['g_happiness']
-    latest_h = latest_h_normalized * 100
-    gap = latest_g - latest_h
-    st.subheader("💡 インサイト・エンジン")
-    with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
-        if gap > threshold: st.info(f"**【幸福なサプライズ！🎉】**...")
-        elif gap < -threshold: st.warning(f"**【隠れた不満？🤔】**...")
-        else: st.success(f"**【順調な航海です！✨】**...")
-
+# A-2. RHI計算
 def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi: float, tau_rhi: float) -> dict:
-    # ... (v2.1.2のコード)
-    if df_period.empty: return {}
+    if df_period.empty:
+        return {}
     mean_H = df_period['H'].mean()
     std_H = df_period['H'].std(ddof=0)
     frac_below = (df_period['H'] < tau_rhi).mean()
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-def safe_filename(name): return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
-def hash_password(password): return hashlib.sha256(str.encode(password)).hexdigest()
-def check_password(password, hashed_password): return hash_password(password) == hashed_password
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
-    return pd.read_csv(USERS_FILE)
-def save_users(df_users): df_users.to_csv(USERS_FILE, index=False)
-def get_existing_users():
-    df_users = load_users()
-    return df_users['username'].tolist()
+# A-3. AHP計算
 def calculate_ahp_weights(comparisons, items):
     n = len(items)
     matrix = np.ones((n, n))
@@ -197,9 +179,26 @@ def calculate_ahp_weights(comparisons, items):
     
     return (weights * 100).round().astype(int)
 
-# --- ウェルカムページ & ガイド関数 ---
+# B. ユーザー認証・データ管理要件
+def safe_filename(name):
+    return re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+
+def hash_password(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+def check_password(password, hashed_password):
+    return hash_password(password) == hashed_password
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
+    return pd.read_csv(USERS_FILE)
+
+def save_users(df_users):
+    df_users.to_csv(USERS_FILE, index=False)
+
+# C-1. オンボーディング
 def show_welcome_and_guide():
-    # ... (v2.1.2の完全なコード)
     st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
@@ -228,7 +227,7 @@ def show_welcome_and_guide():
         - 記録を続けると、あなたの幸福度の**物語（グラフ）**が見えてきます。羅針盤（理想）と、日々の航路（現実）の**ズレ**から、次の一手を見つけ出しましょう。
     """)
     st.markdown("---")
-    st.subheader("🛡️【最重要】あなたのデータとプライバシーは、絶対的に保護されます")
+    st.subheader("🛡️【最重要】あなたのデータとプライバシーについて")
     with st.expander("▼ 解説：クラウド上の「魔法のレストラン」の、少し詳しいお話"):
         st.markdown("""
         「私の個人的な記録が、開発者に見られてしまうのでは？」という不安は、当然のものです。その不安を完全に取り除くために、このアプリがどういう仕組みで動いているのか、少し詳しくお話しさせてください。
@@ -241,7 +240,7 @@ def show_welcome_and_guide():
         
         **【あなたの来店と、プライベートな記録ノート】**
         
-        あなたがレストランに来店し、「Taroです」と名乗ると、レストランの賢い受付係（アプリの認証ロジック）が、裏手にある巨大で安全な**「顧客ノート保管庫」**へ向かいます。
+        あなたがレストランに来店し、「Taroです」と名乗ると、レストランの賢い受付係（アプリの認証ロ-ジック）が、裏手にある巨大で安全な**「顧客ノート保管庫」**へ向かいます。
         
         そして、保管庫の中から**「Taro様専用」と書かれた、あなただけのプライベートな記録ノート（CSVファイル）**を探し出します。もし初めての来店であれば、新しい真っ白なノートに「Taro様専用」と書いて、あなたに渡してくれます。
         
@@ -284,172 +283,186 @@ def show_welcome_and_guide():
     """)
     st.markdown("---")
 
-
 # --- 2. アプリケーションのUIとロジック ---
 st.title(f'🧭 Harmony Navigator (MVP v2.1.3)')
 st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
-st.sidebar.header("👤 ユーザー認証")
-if 'username' not in st.session_state: st.session_state['username'] = None
-if 'consent' not in st.session_state: st.session_state['consent'] = False
-df_users = load_users()
-existing_users = df_users['username'].tolist()
-auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
+# C-9. セッション管理
+if 'username' not in st.session_state:
+    st.session_state['username'] = None
+if 'consent' not in st.session_state:
+    st.session_state['consent'] = False
+if 'wizard_mode' not in st.session_state:
+    st.session_state.wizard_mode = False
+if 'q_wizard_step' not in st.session_state:
+    st.session_state.q_wizard_step = 0
+if 'q_comparisons' not in st.session_state:
+    st.session_state.q_comparisons = {}
+if 'q_values_from_wizard' not in st.session_state:
+    st.session_state.q_values_from_wizard = None
 
-if auth_mode == "ログイン":
-    if not existing_users:
-        st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
-    else:
-        login_username = st.sidebar.text_input("ユーザー名:", key="login_username")
-        login_password = st.sidebar.text_input("パスワード:", type="password", key="login_password")
-        if st.sidebar.button("ログイン", key="login_button"):
-            login_username_safe = safe_filename(login_username)
-            if login_username_safe in existing_users:
-                user_data = df_users[df_users['username'] == login_username_safe].iloc[0]
-                if check_password(login_password, user_data['password_hash']):
-                    st.session_state['username'] = login_username_safe
-                    st.rerun()
-                else:
-                    st.sidebar.error("パスワードが間違っています。")
-            else:
-                st.sidebar.error("そのユーザー名は存在しません。")
-elif auth_mode == "新規登録":
-    new_username_raw = st.sidebar.text_input("新しいユーザー名を入力してください:", key="new_username_input")
-    new_password = st.sidebar.text_input("パスワード:", type="password", key="new_password")
-    new_password_confirm = st.sidebar.text_input("パスワード（確認用）:", type="password", key="new_password_confirm")
-    consent = st.sidebar.checkbox("研究協力に関する説明を読み、その内容に同意します。")
-    
-    if st.sidebar.button("登録", key="register_button"):
-        new_username_safe = safe_filename(new_username_raw)
-        if not new_username_safe: st.sidebar.error("ユーザー名を入力してください。")
-        elif new_username_safe in existing_users: st.sidebar.error("その名前はすでに使われています。")
-        elif new_password != new_password_confirm: st.sidebar.error("パスワードが一致しません。")
-        elif len(new_password) < 8: st.sidebar.error("パスワードは8文字以上で設定してください。")
+# ログインしていないユーザーにはウェルカムページを表示
+if not st.session_state.get('username'):
+    st.sidebar.header("👤 ユーザー認証")
+    auth_mode = st.sidebar.radio("モードを選択してください:", ("ログイン", "新規登録"))
+    df_users = load_users()
+    existing_users = df_users['username'].tolist()
+
+    if auth_mode == "ログイン":
+        if not existing_users:
+            st.sidebar.warning("登録済みのユーザーがいません。まずは新規登録してください。")
         else:
-            hashed_password = hash_password(new_password)
-            new_user_df = pd.DataFrame([{'username': new_username_safe, 'password_hash': hashed_password}])
-            df_users = pd.concat([df_users, new_user_df], ignore_index=True)
-            save_users(df_users)
-            
-            st.session_state['username'] = new_username_safe
-            st.session_state['consent'] = consent
-            st.sidebar.success(f"ようこそ、{new_username_safe}さん！登録が完了しました。")
-            st.rerun()
+            login_username = st.sidebar.text_input("ユーザー名:", key="login_username")
+            login_password = st.sidebar.text_input("パスワード:", type="password", key="login_password")
+            if st.sidebar.button("ログイン", key="login_button"):
+                login_username_safe = safe_filename(login_username)
+                if login_username_safe in existing_users:
+                    user_data = df_users[df_users['username'] == login_username_safe].iloc[0]
+                    if check_password(login_password, user_data['password_hash']):
+                        st.session_state['username'] = login_username_safe
+                        st.rerun()
+                    else:
+                        st.sidebar.error("パスワードが間違っています。")
+                else:
+                    st.sidebar.error("そのユーザー名は存在しません。")
 
-if st.session_state.get('username'):
-    username = st.session_state['username']
-    CSV_FILE = CSV_FILE_TEMPLATE.format(username)
-    
-    tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
-
-    with tab1:
-        st.header(f"ようこそ、{username} さん！")
-        if os.path.exists(CSV_FILE):
-            try:
-                df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
-                df_data['date'] = df_data['date'].dt.date
+    elif auth_mode == "新規登録":
+        new_username_raw = st.sidebar.text_input("新しいユーザー名を入力してください:", key="new_username_input")
+        new_password = st.sidebar.text_input("パスワード:", type="password", key="new_password")
+        new_password_confirm = st.sidebar.text_input("パスワード（確認用）:", type="password", key="new_password_confirm")
+        # D-1. インフォームド・コンセント
+        consent = st.sidebar.checkbox("研究協力に関する説明を読み、その内容に同意します。")
+        
+        # B-1. ユーザー登録
+        if st.sidebar.button("登録", key="register_button"):
+            new_username_safe = safe_filename(new_username_raw)
+            if not new_username_safe: st.sidebar.error("ユーザー名を入力してください。")
+            elif new_username_safe in existing_users: st.sidebar.error("その名前はすでに使われています。")
+            elif new_password != new_password_confirm: st.sidebar.error("パスワードが一致しません。")
+            elif len(new_password) < 8: st.sidebar.error("パスワードは8文字以上で設定してください。")
+            else:
+                hashed_password = hash_password(new_password)
+                new_user_df = pd.DataFrame([{'username': new_username_safe, 'password_hash': hashed_password}])
+                df_users = pd.concat([df_users, new_user_df], ignore_index=True)
+                save_users(df_users)
                 
-                # --- 【v1.2.3新機能】データ移行（マイグレーション）ロジック ---
-                if 's_health' not in df_data.columns:
-                    st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
-                    for domain in DOMAINS:
-                        element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
-                        if element_cols:
-                            df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
-                    for col in S_COLS:
-                        if col not in df_data.columns:
-                            df_data[col] = 50
-            except Exception as e:
-                st.error(f"データファイルの読み込み中にエラーが発生しました: {e}")
-                df_data = pd.DataFrame()
+                st.session_state['username'] = new_username_safe
+                # D-2. 同意の記録
+                st.session_state['consent'] = consent
+                st.sidebar.success(f"ようこそ、{new_username_safe}さん！登録が完了しました。")
+                st.rerun()
+    
+    st.divider()
+    # C-1. オンボーディング
+    show_welcome_and_guide()
+    st.stop() # ログインしていない場合はここで実行を停止
+
+# --- メインアプリの表示 ---
+username = st.session_state.get('username')
+CSV_FILE = CSV_FILE_TEMPLATE.format(username)
+
+# C-2. タブUI
+tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
+
+with tab1:
+    st.header(f"ようこそ、{username} さん！")
+    
+    # B-6. データ移行（マイグレーション）
+    try:
+        if os.path.exists(CSV_FILE):
+            df_data = pd.read_csv(CSV_FILE, parse_dates=['date'])
+            df_data['date'] = df_data['date'].dt.date
+            
+            if 's_health' not in df_data.columns:
+                st.info("古いバージョンのデータを検出しました。新しいデータ構造に自動で移行します。")
+                for domain in DOMAINS:
+                    element_cols = [f's_element_{e}' for e in LONG_ELEMENTS.get(domain, []) if f's_element_{e}' in df_data.columns]
+                    if element_cols:
+                        df_data['s_' + domain] = df_data[element_cols].mean(axis=1).round()
+                for col in S_COLS:
+                    if col not in df_data.columns:
+                        df_data[col] = 50
         else:
             columns = ['date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log']
             for _, elements in LONG_ELEMENTS.items():
                 for element in elements:
                     columns.append(f's_element_{element}')
             df_data = pd.DataFrame(columns=columns)
-        
-        today = date.today()
-        
-        st.sidebar.subheader('クイックアクセス')
-        if not df_data.empty and not df_data[df_data['date'] == today].empty: 
-            st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
-        else: 
-            st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
-        st.sidebar.divider()
-        
-        st.sidebar.header('⚙️ 価値観 (q_t) の設定')
-        st.sidebar.caption('あなたの「理想のコンパス」です。')
-        
-        if 'wizard_mode' not in st.session_state: st.session_state.wizard_mode = False
-        if 'q_wizard_step' not in st.session_state: st.session_state.q_wizard_step = 0
-        if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
-        if 'q_values_from_wizard' not in st.session_state: st.session_state.q_values_from_wizard = None
+    except Exception as e:
+        # C-10. エラーハンドリング
+        st.error(f"データファイルの読み込み中に予期せぬエラーが発生しました。開発者にご報告ください: {e}")
+        df_data = pd.DataFrame()
 
-        with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
-            st.markdown("""
-            合計100点の配分、難しいですよね？
+    today = date.today()
+    
+    st.sidebar.subheader('クイックアクセス')
+    if not df_data.empty and not df_data[df_data['date'] == today].empty: 
+        st.sidebar.success(f"✅ 今日の記録 ({today.strftime('%Y-%m-%d')}) は完了しています。")
+    else: 
+        st.sidebar.info(f"ℹ️ 今日の記録 ({today.strftime('%Y-%m-%d')}) はまだありません。")
+    st.sidebar.divider()
+    
+    # C-3. 価値観設定（`q_t`）のUX
+    st.sidebar.header('⚙️ 価値観 (q_t) の設定')
+    st.sidebar.caption('あなたの「理想のコンパス」です。')
+    
+    with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
+        st.markdown("""合計100点の配分、難しいですよね？\n\nそんなあなたのために、簡単な質問に答えるだけで、あなたの価値観の**『たたき台』**を自動で提案する機能を用意しました。""")
+        if st.button("対話で価値観を発見する（21の質問）"):
+            st.session_state.wizard_mode = True
+            st.session_state.q_wizard_step = 1
+            st.session_state.q_comparisons = {}
+            st.rerun()
             
-            そんなあなたのために、簡単な質問に答えるだけで、あなたの価値観の**『たたき台』**を自動で提案する機能を用意しました。
-            """)
-            if st.button("対話で価値観を発見する（21の質問）"):
-                st.session_state.wizard_mode = True
-                st.session_state.q_wizard_step = 1
-                st.session_state.q_comparisons = {}
+    if st.session_state.wizard_mode:
+        pairs = list(itertools.combinations(DOMAINS, 2))
+        if st.session_state.q_wizard_step > 0 and st.session_state.q_wizard_step <= len(pairs):
+            pair = pairs[st.session_state.q_wizard_step - 1]
+            domain1, domain2 = pair
+            st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
+            st.sidebar.write("あなたの人生がより充実するために、今、**より重要**なのはどちらですか？")
+            col1, col2 = st.sidebar.columns(2)
+            if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
+                st.session_state.q_comparisons[pair] = domain1
+                st.session_state.q_wizard_step += 1
                 st.rerun()
-        if st.session_state.wizard_mode:
-            pairs = list(itertools.combinations(DOMAINS, 2))
-            if st.session_state.q_wizard_step > 0 and st.session_state.q_wizard_step <= len(pairs):
-                pair = pairs[st.session_state.q_wizard_step - 1]
-                domain1, domain2 = pair
-                
-                st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
-                st.sidebar.write("あなたの人生がより充実するために、今、**より重要**なのはどちらですか？")
-                
-                col1, col2 = st.sidebar.columns(2)
-                if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
-                    st.session_state.q_comparisons[pair] = domain1
-                    st.session_state.q_wizard_step += 1
-                    st.rerun()
-                if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
-                    st.session_state.q_comparisons[pair] = domain2
-                    st.session_state.q_wizard_step += 1
-                    st.rerun()
-            else:
-                st.sidebar.success("診断完了！あなたの価値観の推定値です。")
-                estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
-                diff = 100 - np.sum(estimated_weights)
-                estimated_weights[np.argmax(estimated_weights)] += diff
-                
-                st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
-                st.session_state.wizard_mode = False
+            if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
+                st.session_state.q_comparisons[pair] = domain2
+                st.session_state.q_wizard_step += 1
                 st.rerun()
         else:
-            if st.session_state.q_values_from_wizard is not None:
-                default_q_values = st.session_state.q_values_from_wizard
-                st.session_state.q_values_from_wizard = None
-            elif not df_data.empty and all(col in df_data.columns for col in Q_COLS):
-                default_q_values = {d.replace('q_',''): val * 100 for d, val in df_data[Q_COLS].iloc[-1].to_dict().items()}
-            else:
-                default_q_values = {
-                    'health': 15, 'relationships': 15, 'meaning': 15, 
-                    'autonomy': 15, 'finance': 15, 'leisure': 15, 'competition': 10
-                }
+            st.sidebar.success("診断完了！あなたの価値観の推定値です。")
+            estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
+            diff = 100 - np.sum(estimated_weights)
+            estimated_weights[np.argmax(estimated_weights)] += diff
+            st.session_state.q_values_from_wizard = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
+            st.session_state.wizard_mode = False
+            st.rerun()
+    else:
+        if st.session_state.q_values_from_wizard is not None:
+            default_q_values = st.session_state.q_values_from_wizard
+            st.session_state.q_values_from_wizard = None
+        elif not df_data.empty and all(col in df_data.columns for col in Q_COLS):
+            default_q_values = {d.replace('q_',''): val * 100 for d, val in df_data[Q_COLS].iloc[-1].to_dict().items()}
+        else:
+            default_q_values = {'health': 15, 'relationships': 15, 'meaning': 15, 'autonomy': 15, 'finance': 15, 'leisure': 15, 'competition': 10}
 
-            q_values = {}
-            for i, domain in enumerate(DOMAINS):
-                q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
-            
-            q_total = sum(q_values.values())
-            st.sidebar.metric(label="現在の合計値", value=q_total)
-            if q_total != 100: st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-            else: st.sidebar.success("合計は100です。入力準備OK！")
+        q_values = {}
+        for i, domain in enumerate(DOMAINS):
+            q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+        
+        q_total = sum(q_values.values())
+        st.sidebar.metric(label="現在の合計値", value=q_total)
+        if q_total != 100: st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+        else: st.sidebar.success("合計は100です。入力準備OK！")
 
         st.subheader('今日の航海日誌を記録する')
         with st.expander("▼ これは、何のために記録するの？"): st.markdown(EXPANDER_TEXTS['s_t'])
+        
         st.markdown("##### 記録する日付")
         target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=7), max_value=today, label_visibility="collapsed")
         if not df_data.empty and not df_data[df_data['date'] == target_date].empty: st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
+        
         st.markdown("##### 記録モード")
         input_mode = st.radio("記録モード:", ('🚀 **クイック・ログ**', '🔬 **ディープ・ダイブ**'), horizontal=True, label_visibility="collapsed", captions=["日々の継続を重視した、基本的な測定モードです。", "週に一度など、じっくり自分と向き合いたい時に。より深い洞察を得られます。"])
         if 'クイック' in input_mode: active_elements = SHORT_ELEMENTS; mode_string = 'quick'
@@ -526,7 +539,7 @@ if st.session_state.get('username'):
                 st.balloons()
                 st.rerun()
 
-    with tab2: # ダッシュボードタブ
+    with tab2:
         st.header('📊 あなたの航海チャート')
         with st.expander("▼ このチャートの見方"):
             st.markdown(EXPANDER_TEXTS['dashboard'])
@@ -580,7 +593,7 @@ if st.session_state.get('username'):
             st.subheader('全記録データ')
             st.dataframe(df_processed.round(2))
             
-    with tab3: # 設定とガイドタブ
+    with tab3:
         st.header("🔧 設定とガイド")
         st.subheader("アカウント設定")
         st.write(f"ログイン中のユーザー: **{username}**")
@@ -588,7 +601,17 @@ if st.session_state.get('username'):
             st.session_state['username'] = None
             st.rerun()
         
+        # B-7. データエクスポート
+        if not df_data.empty:
+            st.download_button(
+                label="📥 全データをダウンロード",
+                data=df_data.to_csv(index=False).encode('utf-8'),
+                file_name=f'harmony_data_{username}_{datetime.now().strftime("%Y%m%d")}.csv',
+                mime='text/csv',
+            )
+        
         st.divider()
+        # B-5. アカウント削除
         st.subheader("アカウント削除")
         st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
         password_for_delete = st.text_input("削除するには、パスワードを入力してください:", type="password", key="delete_password")
@@ -614,4 +637,6 @@ if st.session_state.get('username'):
         show_welcome_and_guide()
         
 else:
+    # ログインしていないユーザーにはウェルカムページを表示
+    # C-1. オンボーディング
     show_welcome_and_guide()
