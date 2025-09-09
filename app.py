@@ -5,6 +5,7 @@ from scipy.spatial.distance import jensenshannon
 import os
 from datetime import datetime, date, timedelta
 import re
+import glob
 import hashlib
 import itertools
 
@@ -137,7 +138,7 @@ EXPANDER_TEXTS = {
         後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
         """,
     'dashboard': """
-        ここでは、記録されたデータから、あなたの幸福の**パターンと構造**を可視化します。
+        ここでは、記録されたデータから、あなたの幸福の**パターンと構造**を可-視化します。
         - **💡 インサイト・エンジン:** モデルの計算値(H)とあなたの実感(G)のズレから、自己発見のヒントを提示します。
         - **📈 期間分析とリスク評価 (RHI):** あなたの幸福の**平均点**だけでなく、その**安定性や持続可能性（リスク）**を評価します。
         - **📊 調和度の推移:** あなたの幸福度の時間的な**『物語』**です。グラフの山や谷が、いつ、なぜ起きたのかを探ってみましょう。
@@ -166,7 +167,6 @@ def calculate_metrics(dataframe: pd.DataFrame, alpha: float = 0.6) -> pd.DataFra
         q_sum = np.sum(q_vec)
         if q_sum == 0:
             return 0.0
-        # 正規化して分布にする
         q_vec = q_vec / q_sum
         s_sum = np.sum(s_vec_raw)
         if s_sum == 0:
@@ -234,17 +234,13 @@ def calculate_rhi_metrics(dataframe_period: pd.DataFrame, lambda_rhi: float, gam
 
 
 def safe_filename(name: str) -> str:
-    # ファイル名に使えない文字だけを置換し、空文字列になったらハッシュを使う
     if name is None:
         return hashlib.sha256(str(datetime.now()).encode()).hexdigest()
     name_str = str(name).strip()
-    # Windows/Unix のファイル名に悪影響を与える文字を置換
     name_str = re.sub(r'[\/:*?"<>|]+', '_', name_str)
-    # 先頭末尾の空白やドットを取り除く
     name_str = name_str.strip(' .')
     if name_str == '':
         return hashlib.sha256(str(datetime.now()).encode()).hexdigest()
-    # 長すぎる場合は切り詰める
     return name_str[:120]
 
 
@@ -261,7 +257,6 @@ def load_users() -> pd.DataFrame:
         pd.DataFrame(columns=['username', 'password_hash']).to_csv(USERS_FILE, index=False)
     try:
         users_df = pd.read_csv(USERS_FILE)
-        # 旧ファイルで列が欠けている場合に備える
         if 'username' not in users_df.columns or 'password_hash' not in users_df.columns:
             users_df = pd.DataFrame(columns=['username', 'password_hash'])
         return users_df
@@ -390,7 +385,6 @@ def main():
     st.title('🧭 Harmony Navigator (MVP v3.0.0)')
     st.caption('あなたの「理想」と「現実」のズレを可視化し、より良い人生の航路を見つけるための道具')
 
-    # --- ユーザー認証 ---
     st.sidebar.header("👤 ユーザー認証")
     if 'username' not in st.session_state:
         st.session_state['username'] = None
@@ -639,7 +633,7 @@ def main():
                 st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
 
             st.markdown("##### 記録モード")
-            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ', '🔬 ディープ・ダイブ'), label_visibility="collapsed")
+            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ', '🔬 ディープ・ダイブ'), horizontal=True, label_visibility="collapsed")
             if 'クイック' in input_mode:
                 active_elements = SHORT_ELEMENTS
                 mode_string = 'quick'
@@ -649,8 +643,7 @@ def main():
 
             with st.form(key='daily_input_form'):
                 st.markdown(f'**{input_mode.split("（")[0]}**')
-                s_values = {}
-                s_element_values = {}
+                s_values, s_element_values = {}, {}
                 col1, col2 = st.columns(2)
                 domain_containers = {'health': col1, 'relationships': col1, 'meaning': col1, 'autonomy': col2, 'finance': col2, 'leisure': col2}
 
@@ -678,8 +671,6 @@ def main():
                                     s_element_values[f's_element_{element}'] = int(score)
                                 if element_scores:
                                     s_values[domain] = int(round(np.mean(element_scores)))
-
-                # competition ドメインは右カラムに表示
                 with col2:
                     domain = 'competition'
                     elements_to_show = active_elements.get(domain, [])
@@ -704,8 +695,6 @@ def main():
             if submitted:
                 # フォーム送信時に、表示されているスライダーの実際の値を必ず取得するため、
                 # session_state から q_* を再取得して q_values を作り直します。
-                # これにより、ウィザード経由でスライダー表示が変わっていても、保存時に
-                # 画面上の実際の値が確実に保存されます。
                 q_values = {d: int(st.session_state.get(f"q_{d}", 0)) for d in DOMAINS}
                 q_total = sum(q_values.values())
 
@@ -765,12 +754,7 @@ def main():
 
                 st.subheader("📈 期間分析とリスク評価 (RHI)")
                 with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
-                    st.markdown("""
-                    - **平均調和度 (H̄):** この期間の、あなたの幸福の平均点です。
-                    - **変動リスク (σ):** 幸福度の浮き沈みの激しさです。値が小さいほど、安定した航海だったことを示します。
-                    - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
-                    - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、真の『幸福の実力値』です。この値が高いほど、あなたの幸福が持続可能で、逆境に強いことを示します。
-                    """)
+                    st.markdown("...")
 
                 period_options = [7, 30, 90]
                 if len(dataframe_processed) < 7:
@@ -784,9 +768,9 @@ def main():
 
                         st.markdown("##### あなたのリスク許容度を設定")
                         col1, col2, col3 = st.columns(3)
-                        lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-                        gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-                        tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
+                        lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="...")
+                        gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="...")
+                        tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="...")
 
                         rhi_results = calculate_rhi_metrics(dataframe_period, lambda_param, gamma_param, tau_param)
 
@@ -849,4 +833,22 @@ def main():
                         except Exception:
                             pass
                         st.session_state['username'] = None
-  
+                        st.session_state['username_safe'] = None
+                        st.success("アカウントと関連する全てのデータを削除しました。")
+                        st.rerun()
+                    else:
+                        st.error("パスワードが間違っています。")
+                else:
+                    st.error("ユーザーが見つかりません。")
+
+            st.markdown('---')
+            st.subheader("このアプリについて")
+            show_welcome_and_guide()
+
+    else:
+        # 未ログイン時には案内を表示
+        show_welcome_and_guide()
+
+
+if __name__ == '__main__':
+    main()
