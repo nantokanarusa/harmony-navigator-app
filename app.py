@@ -36,7 +36,7 @@ Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 CSV_FILE_TEMPLATE = 'harmony_data_{}.csv'
 USERS_FILE = 'users.csv'
-SLIDER_HELP_TEXT = "0: 全く当てはまらない
+SLIDER_HELP_TEXT = """0: 全く当てはまらない
 
 25: あまり当てはまらない
 
@@ -44,7 +44,7 @@ SLIDER_HELP_TEXT = "0: 全く当てはまらない
 
 75: やや当てはまる
 
-100: 完全に当てはまる"
+100: 完全に当てはまる"""
 
 ELEMENT_DEFINITIONS = {
     '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。',
