@@ -40,7 +40,7 @@ LONG_ELEMENTS = {
     'competition': ['優越感・勝利']
 }
 ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
-Q_COLS = ['q_' + d for d in DOMAINS]
+Q_COLS = ['q_' 'q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 SLIDER_HELP_TEXT = "0: 全く当てはまらない | 25: あまり当てはまらない | 50: どちらとも言えない | 75: やや当てはまる | 100: 完全に当てはまる"
 
@@ -126,7 +126,7 @@ EXPANDER_TEXTS = {
         
         **『誰と会った』『何をした』『何を感じた』**といった具体的な出来事や感情を、一言でも良いので書き留めてみましょう。
         
-        後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
+        後でグラフを見たときに、数値だけでは分からない、**幸福度の浮-き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
         """
 }
 
@@ -296,8 +296,8 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
 def get_gspread_client():
     try:
         scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
+            "https.www.googleapis.com/auth/spreadsheets",
+            "https.www.googleapis.com/auth/drive"
         ]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         creds.refresh(Request())
@@ -444,7 +444,6 @@ def main():
         st.warning("現在、データベースに接続できません。時間をおいて再度お試しください。")
         st.stop()
 
-    # SecretsからスプレッドシートIDを取得
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
         data_sheet_id = st.secrets["connections"]["gsheets"]["data_sheet_id"]
@@ -454,28 +453,408 @@ def main():
 
     if 'auth_status' not in st.session_state:
         st.session_state.auth_status = "NOT_LOGGED_IN"
-    # (以下、セッション状態の初期化は省略)
+    if 'user_id' not in st.session_state:
+        st.session_state.user_id = None
+    if 'enc_manager' not in st.session_state:
+        st.session_state.enc_manager = None
+    if 'q_values' not in st.session_state:
+        st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
+        st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
 
-    if st.session_state.auth_status in ["LOGGED_IN_LOCKED", "LOGGED_IN_UNLOCKED", "AWAITING_ID"]:
-        # (ここに、v4.3.1のログイン後、または贈呈式を待っている状態のロジックが、完全に、省略なく入ります)
-        # (ただし、read_data, write_data呼び出し時に、gspread_clientとspreadsheet_idを渡すように変更)
-        pass
-    else: # NOT_LOGGED_IN
-        st.header("ようこそ、航海士へ")
+    if st.session_state.auth_status == "AWAITING_ID":
+        st.header("【あなたの船が、完成しました】")
+        st.success("ようこそ、航海士へ。")
+        st.warning(f"""
+            **⚠️【必ず、今すぐ、安全な場所に記録してください】**\n
+            これが、あなたの船に戻るための、世界でたった一つの、あなただけの**『秘密の合い言葉』**です。\n
+            この合い言葉は、**二度と表示されません。** もし失くしてしまうと、あなたの航海日誌は、永遠に失われます。
+            """)
+        st.code(st.session_state.user_id)
+        st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
+        
+        if st.button("はい、安全に保管しました。旅を始める"):
+            st.session_state.auth_status = "LOGGED_IN_LOCKED"
+            st.rerun()
+
+    elif st.session_state.auth_status == "LOGGED_IN_LOCKED":
+        st.header("🔒 心の金庫を開ける")
+        st.info(f"ようこそ、`{st.session_state.user_id}` さん。")
+        st.warning("航海日誌を読み書きするために、あなたのパスワードを入力して、このセッションのロックを解除してください。")
+        
+        with st.form("decryption_form"):
+            password_for_decrypt = st.text_input("パスワード", type="password")
+            submitted = st.form_submit_button("ロックを解除する")
+
+            if submitted:
+                users_df = read_data(gspread_client, 'users', users_sheet_id)
+                user_record = users_df[users_df['user_id'] == st.session_state.user_id]
+                if not user_record.empty and EncryptionManager.check_password(password_for_decrypt, user_record.iloc[0]['password_hash']):
+                    st.session_state.enc_manager = EncryptionManager(password_for_decrypt)
+                    st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                    st.success("ロックが解除されました！")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("パスワードが間違っています。")
+
+    elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
+        user_id = st.session_state.user_id
+        
+        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
+        if not all_data_df.empty and 'user_id' in all_data_df.columns:
+            user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+        else:
+            user_data_df = pd.DataFrame()
+
+        st.sidebar.header(f"ようこそ、{user_id} さん！")
+        if st.sidebar.button("ログアウト（下船する）"):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+        
+        st.sidebar.markdown("---")
+        st.sidebar.header('⚙️ 価値観 (q_t) の設定')
+        with st.sidebar.expander("▼ これは、何のために設定するの？"):
+            st.markdown(EXPANDER_TEXTS['q_t'])
+
+        if 'wizard_mode' not in st.session_state:
+            st.session_state.wizard_mode = False
+        if 'q_wizard_step' not in st.session_state:
+            st.session_state.q_wizard_step = 0
+        if 'q_comparisons' not in st.session_state:
+            st.session_state.q_comparisons = {}
+        
+        with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
+            st.markdown("合計100点の配分は難しいと感じることがあります。簡単な比較質問に答えるだけで、あなたの価値観のたたき台を提案します。")
+            if st.button("対話で価値観を発見する（21の質問）"):
+                st.session_state.wizard_mode = True
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
+                st.rerun()
+        
+        if st.session_state.wizard_mode:
+            pairs = list(itertools.combinations(DOMAINS, 2))
+            if 0 < st.session_state.q_wizard_step <= len(pairs):
+                pair = pairs[st.session_state.q_wizard_step - 1]
+                domain1, domain2 = pair
+                st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
+                st.sidebar.write("あなたの人生がより充実するために、今、より重要なのはどちらですか？")
+                col1, col2 = st.sidebar.columns(2)
+                if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
+                    st.session_state.q_comparisons[pair] = domain1
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
+                if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
+                    st.session_state.q_comparisons[pair] = domain2
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
+            else:
+                st.sidebar.success("診断完了！あなたの価値観の推定値です。")
+                estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
+                st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
+                st.session_state.wizard_mode = False
+                st.rerun()
+        else:
+            if not user_data_df.empty and not user_data_df[Q_COLS].dropna().empty:
+                latest_q_row = user_data_df.sort_values(by='date', ascending=False)[Q_COLS].dropna()
+                if not latest_q_row.empty:
+                    latest_q = latest_q_row.iloc[0].to_dict()
+                    default_q_values = {key.replace('q_', ''): int(val * 100) for key, val in latest_q.items()}
+                else:
+                    default_q_values = st.session_state.q_values
+            else:
+                default_q_values = st.session_state.q_values
+            
+            for domain in DOMAINS:
+                st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+
+            q_total = sum(st.session_state.q_values.values())
+            st.sidebar.metric(label="現在の合計値", value=q_total)
+            if q_total != 100:
+                st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+            else:
+                st.sidebar.success("合計は100です。入力準備OK！")
+
+        tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
+
+        with tab1:
+            st.header(f"今日の航海日誌を記録する")
+            
+            with st.expander("▼ これは、何のために記録するの？"):
+                st.markdown(EXPANDER_TEXTS['s_t'])
+            
+            st.markdown("##### 記録する日付")
+            today = date.today()
+            target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=7), max_value=today, label_visibility="collapsed")
+            
+            if not user_data_df.empty and target_date in user_data_df['date'].values:
+                st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
+
+            st.markdown("##### 記録モード")
+            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ', '🔬 ディープ・ダイブ'), horizontal=True, label_visibility="collapsed")
+            
+            active_elements = SHORT_ELEMENTS if 'クイック' in input_mode else LONG_ELEMENTS
+            mode_string = 'quick' if 'クイック' in input_mode else 'deep'
+            
+            with st.form(key='daily_input_form'):
+                s_element_values = {}
+                col1, col2 = st.columns(2)
+                
+                if not user_data_df.empty:
+                    latest_s_elements = user_data_df.sort_values(by='date', ascending=False).iloc[0]
+                else:
+                    latest_s_elements = pd.Series(50, index=ALL_ELEMENT_COLS)
+
+                for i, domain in enumerate(DOMAINS):
+                    container = col1 if i < 4 else col2
+                    with container:
+                        elements_to_show = active_elements.get(domain, [])
+                        if elements_to_show:
+                            with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**"):
+                                for element in elements_to_show:
+                                    col_name = f's_element_{element}'
+                                    default_val = int(latest_s_elements.get(col_name, 50))
+                                    help_text = ELEMENT_DEFINITIONS.get(element, "")
+                                    score = st.slider(element, 0, 100, default_val, key=col_name, help=help_text)
+                                    s_element_values[col_name] = int(score)
+                
+                st.markdown('**総合的な幸福感 (Gt)**')
+                with st.expander("▼ これはなぜ必要？"):
+                    st.markdown(EXPANDER_TEXTS['g_t'])
+                g_happiness = st.slider('', 0, 100, 50, label_visibility="collapsed", help=SLIDER_HELP_TEXT)
+                
+                st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
+                with st.expander("▼ なぜ書くのがおすすめ？"):
+                    st.markdown(EXPANDER_TEXTS['event_log'])
+                event_log = st.text_area('', height=100, label_visibility="collapsed")
+                
+                submitted = st.form_submit_button('今日の記録を保存する')
+
+            if submitted:
+                if sum(st.session_state.q_values.values()) != 100:
+                    st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
+                else:
+                    new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
+                    new_record.update(s_element_values)
+                    
+                    s_domain_scores = {}
+                    for domain, elements in LONG_ELEMENTS.items():
+                        domain_scores_list = [new_record[f's_element_{e}'] for e in elements if pd.notna(new_record.get(f's_element_{e}'))]
+                        if domain_scores_list:
+                            s_domain_scores['s_' + domain] = int(round(np.mean(domain_scores_list)))
+                        else:
+                            s_domain_scores['s_' + domain] = pd.NA
+                    
+                    encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
+                    
+                    consent_record = user_data_df[user_data_df['user_id'] == user_id]
+                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else st.session_state.get('consent', False)
+
+                    new_record.update({
+                        'user_id': user_id, 'date': target_date, 'mode': mode_string,
+                        'consent': consent_status,
+                        'g_happiness': int(g_happiness), 'event_log': encrypted_log
+                    })
+                    new_record.update({f'q_{d}': v / 100.0 for d, v in st.session_state.q_values.items()})
+                    new_record.update(s_domain_scores)
+
+                    new_df_row = pd.DataFrame([new_record])
+                    
+                    if not all_data_df.empty:
+                        condition = (all_data_df['user_id'] == user_id) & (all_data_df['date'] == target_date)
+                        all_data_df = all_data_df[~condition]
+
+                    all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
+                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+                    
+                    write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
+                    st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
+                    st.balloons()
+                    st.rerun()
+
+        with tab2:
+            st.header('📊 あなたの航海チャート')
+            with st.expander("▼ このチャートの見方", expanded=True):
+                st.markdown(EXPANDER_TEXTS['dashboard'])
+
+            if user_data_df.empty or len(user_data_df.dropna(subset=S_COLS, how='all')) < 1:
+                st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
+            else:
+                df_processed = calculate_metrics(user_data_df.dropna(subset=S_COLS, how='all').copy())
+                
+                st.subheader("📈 期間分析とリスク評価 (RHI)")
+                with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
+                    st.markdown("""
+                    - **平均調和度 (H̄):** この期間の、あなたの幸福の平均点です。
+                    - **変動リスク (σ):** 幸福度の浮き沈みの激しさです。値が小さいほど、安定した航海だったことを示します。
+                    - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
+                    - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、真の『幸福の実力値』です。この値が高いほど、あなたの幸福が持続可能で、逆境に強いことを示します。
+                    """)
+
+                period_options = [7, 30, 90]
+                if len(df_processed) < 7:
+                    st.info("期間分析には最低7日分のデータが必要です。記録を続けてみましょう！")
+                else:
+                    default_index = 1 if len(df_processed) >= 30 else 0
+                    selected_period = st.selectbox("分析期間を選択してください（日）:", period_options, index=default_index)
+
+                    if len(df_processed) >= selected_period:
+                        df_period = df_processed.tail(selected_period)
+
+                        st.markdown("##### あなたのリスク許容度を設定")
+                        col1, col2, col3 = st.columns(3)
+                        lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
+                        gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
+                        tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
+
+                        rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+
+                        st.markdown("##### 分析結果")
+                        col1a, col2a, col3a, col4a = st.columns(4)
+                        col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
+                        col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
+                        col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
+                        col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
+                    else:
+                        st.warning(f"分析には最低{selected_period}日分のデータが必要です。現在の記録は{len(df_processed)}日分です。")
+
+                analyze_discrepancy(df_processed)
+                st.subheader('調和度 (H) の推移')
+                df_chart = df_processed.copy()
+                df_chart['date'] = pd.to_datetime(df_chart['date'], errors='coerce')
+                df_chart = df_chart.sort_values('date')
+                st.line_chart(df_chart.set_index('date')['H'])
+
+                st.subheader('全記録データ（イベントログは暗号化されています）')
+                st.dataframe(user_data_df.drop(columns=['username']).sort_values(by='date', ascending=False).round(3))
+        
+        with tab3:
+            st.header("🔧 設定とガイド")
+            st.subheader("データのエクスポート")
+            if not user_data_df.empty:
+                df_export = user_data_df.copy()
+                if 'event_log' in df_export.columns:
+                    df_export['event_log_decrypted'] = df_export['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                
+                csv_export = df_export.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 全データをダウンロード（イベントログ復号済）",
+                    data=csv_export,
+                    file_name=f'harmony_data_{user_id}_{datetime.now().strftime("%Y%m%d")}.csv',
+                    mime='text/csv',
+                )
+
+            st.markdown('---')
+            st.subheader("アカウント削除")
+            st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
+            with st.form("delete_form"):
+                password_for_delete = st.text_input("削除するには、あなたのパスワードを正確に入力してください:", type="password")
+                delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
+
+                if delete_submitted:
+                    users_df = read_data(gspread_client, 'users', users_sheet_id)
+                    user_record = users_df[users_df['user_id'] == user_id]
+                    if not user_record.empty and EncryptionManager.check_password(password_for_delete, user_record.iloc[0]['password_hash']):
+                        users_df_updated = users_df[users_df['user_id'] != user_id]
+                        write_data(gspread_client, 'users', users_sheet_id, users_df_updated)
+                        
+                        all_data_df_updated = all_data_df[all_data_df['user_id'] != user_id]
+                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
+                        
+                        for key in list(st.session_state.keys()):
+                            del st.session_state[key]
+                        st.success("アカウントと関連する全てのデータを削除しました。")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error("パスワードが間違っています。")
+            
+            st.markdown("---")
+            st.subheader("このアプリについて")
+            show_welcome_and_guide()
+
+    else: # "NOT_LOGGED_IN"
         show_welcome_and_guide()
         
         st.subheader("あなたの旅を、ここから始めましょう")
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
-            # (ここに、v4.3.1の新規登録フォームのUIとロジックが、完全に、省略なく入ります)
-            # (ただし、read_data, write_data呼び出し時に、gspread_clientとspreadsheet_idを渡すように変更)
-            pass
+            st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
+            st.markdown("---")
+            st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
+            st.warning("""
+            この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています。
+            あなたの日記（イベントログ）は、**あなただけが知る「パスワード」**を鍵として、あなたのブラウザの中で**暗号化**されます。
+            """)
+            st.error("""
+            **【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません。**
+            私たちは、あなたのパスワードを、どこにも保存しません。そのため、従来のサービスのような**「パスワードリセット」機能は、存在しません。**
+            """)
+            st.markdown("---")
+
+            with st.form("register_form"):
+                agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
+                new_password = st.text_input("パスワード（8文字以上、全てのデータを守る、あなただけの鍵です）", type="password")
+                new_password_confirm = st.text_input("パスワード（確認用）", type="password")
+                consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
+                submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
+
+                if submitted:
+                    if not agreement:
+                        st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
+                    elif len(new_password) < 8:
+                        st.error("パスワードは8文字以上で設定してください。")
+                    elif new_password != new_password_confirm:
+                        st.error("パスワードが一致しません。")
+                    else:
+                        new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+                        hashed_pw = EncryptionManager.hash_password(new_password)
+                        
+                        users_df = read_data(gspread_client, 'users', users_sheet_id)
+                        new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw}])
+                        updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
+                        write_data(gspread_client, 'users', users_sheet_id, updated_users_df)
+                        
+                        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
+                        new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
+                        all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+                        for col in all_cols_in_order:
+                             if col not in new_user_record.columns:
+                                new_user_record[col] = pd.NA
+                        all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
+                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
+
+                        st.session_state.user_id = new_user_id
+                        st.session_state.enc_manager = EncryptionManager(new_password)
+                        st.session_state.auth_status = "AWAITING_ID"
+                        st.rerun()
 
         with door2:
-            # (ここに、v4.3.1のログインフォームのUIとロジックが、完全に、省略なく入ります)
-            # (ただし、read_data呼び出し時に、gspread_clientとspreadsheet_idを渡すように変更)
-            pass
+            st.info("すでに「秘密の合い言葉」と「パスワード」をお持ちの方は、こちらから旅を続けてください。")
+            with st.form("login_form"):
+                user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
+                password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
+                submitted = st.form_submit_button("乗船する")
+
+                if submitted:
+                    if user_id_input and password_input:
+                        users_df = read_data(gspread_client, 'users', users_sheet_id)
+                        if not users_df.empty:
+                            user_record = users_df[users_df['user_id'] == user_id_input]
+                            if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
+                                st.session_state.user_id = user_id_input
+                                st.session_state.enc_manager = EncryptionManager(password_input)
+                                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                                st.success("乗船しました！")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("合い言葉またはパスワードが間違っています。")
+                        else:
+                            st.error("その合い言葉を持つ船は見つかりませんでした。")
+                    else:
+                        st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
     main()
