@@ -1,19 +1,15 @@
-# app.py (v5.0.0 - The Phoenix / Direct gspread & Robust Error Handling)
+# app.py (v6.0.0 - The Return of the King / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
 from scipy.spatial.distance import jensenshannon
 from datetime import datetime, date, timedelta
-import re
-import hashlib
 import time
 import uuid
 import itertools
 import bcrypt
 import base64
-import gspread
-from google.oauth2.service_account import Credentials
-from google.auth.transport.requests import Request
+from streamlit_gsheets import GSheetsConnection
 
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
@@ -40,7 +36,7 @@ LONG_ELEMENTS = {
     'competition': ['優越感・勝利']
 }
 ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
-Q_COLS = ['q_' 'q_' + d for d in DOMAINS]
+Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 SLIDER_HELP_TEXT = "0: 全く当てはまらない | 25: あまり当てはまらない | 50: どちらとも言えない | 75: やや当てはまる | 100: 完全に当てはまる"
 
@@ -126,7 +122,7 @@ EXPANDER_TEXTS = {
         
         **『誰と会った』『何をした』『何を感じた』**といった具体的な出来事や感情を、一言でも良いので書き留めてみましょう。
         
-        後でグラフを見たときに、数値だけでは分からない、**幸福度の浮-き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
+        後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
         """
 }
 
@@ -291,75 +287,45 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-# --- D. データ永続化層 ---
-@st.cache_resource(ttl=3600)
-def get_gspread_client():
-    try:
-        scopes = [
-            "https.www.googleapis.com/auth/spreadsheets",
-            "https.www.googleapis.com/auth/drive"
-        ]
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
-        creds.refresh(Request())
-        return gspread.authorize(creds)
-    except Exception as e:
-        st.error("Google Sheetsへの認証に失敗しました。Secretsの設定とGCPのAPI設定を確認してください。")
-        st.exception(e)
-        return None
+# --- D. データ永続化層 (st-gsheets-connection) ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
-def read_data(gc: gspread.client.Client, sheet_name: str, spreadsheet_id: str):
-    if gc is None:
-        return pd.DataFrame()
+def read_data(sheet_name: str):
     try:
-        sh = gc.open_by_key(spreadsheet_id)
         if sheet_name == 'users':
-            worksheet = sh.worksheet("users")
+            df = conn.read(worksheet="users")
         elif sheet_name == 'data':
-            worksheet = sh.worksheet("data")
+            df = conn.read(worksheet="data")
         else:
             return pd.DataFrame()
-        
-        df = pd.DataFrame(worksheet.get_all_records())
+
         if not df.empty:
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
+            
             numeric_cols = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness']
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"スプレッドシート（ID: {spreadsheet_id}）が見つかりません。")
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"スプレッドシート内に '{sheet_name}' という名前のワークシートが見つかりません。")
     except Exception as e:
-        st.error(f"データの読み込み中に予期せぬエラーが発生しました。")
-        st.exception(e)
-    return pd.DataFrame()
+        st.error(f"データの読み込みに失敗しました: {e}")
+        return pd.DataFrame()
 
-def write_data(gc: gspread.client.Client, sheet_name: str, spreadsheet_id: str, df: pd.DataFrame):
-    if gc is None:
-        return
+def write_data(sheet_name: str, df: pd.DataFrame):
+    df_copy = df.copy()
+    if 'date' in df_copy.columns:
+        df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
+    
     try:
-        sh = gc.open_by_key(spreadsheet_id)
         if sheet_name == 'users':
-            worksheet = sh.worksheet("users")
+            conn.write(worksheet="users", data=df_copy)
         elif sheet_name == 'data':
-            worksheet = sh.worksheet("data")
-        else:
-            return
-            
-        df_copy = df.copy()
-        if 'date' in df_copy.columns:
-            df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
-        
-        worksheet.clear()
-        worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist())
+            conn.write(worksheet="data", data=df_copy)
         st.cache_data.clear()
     except Exception as e:
-        st.error(f"データの書き込み中にエラーが発生しました。")
-        st.exception(e)
+        st.error(f"データの書き込み中にエラーが発生しました: {e}")
 
 # --- E. UIコンポーネント ---
 def show_welcome_and_guide():
@@ -437,20 +403,9 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v5.0.0 - The Phoenix Edition')
+    st.caption('v6.0.0 - The Return of the King')
 
-    gspread_client = get_gspread_client()
-    if gspread_client is None:
-        st.warning("現在、データベースに接続できません。時間をおいて再度お試しください。")
-        st.stop()
-
-    try:
-        users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
-        data_sheet_id = st.secrets["connections"]["gsheets"]["data_sheet_id"]
-    except KeyError:
-        st.error("SecretsにスプレッドシートID (`users_sheet_id`, `data_sheet_id`) が設定されていません。")
-        st.stop()
-
+    # セッション状態の初期化
     if 'auth_status' not in st.session_state:
         st.session_state.auth_status = "NOT_LOGGED_IN"
     if 'user_id' not in st.session_state:
@@ -486,7 +441,7 @@ def main():
             submitted = st.form_submit_button("ロックを解除する")
 
             if submitted:
-                users_df = read_data(gspread_client, 'users', users_sheet_id)
+                users_df = read_data('users')
                 user_record = users_df[users_df['user_id'] == st.session_state.user_id]
                 if not user_record.empty and EncryptionManager.check_password(password_for_decrypt, user_record.iloc[0]['password_hash']):
                     st.session_state.enc_manager = EncryptionManager(password_for_decrypt)
@@ -500,7 +455,7 @@ def main():
     elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
         user_id = st.session_state.user_id
         
-        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
+        all_data_df = read_data('data')
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         else:
@@ -667,7 +622,7 @@ def main():
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
                     all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
                     
-                    write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
+                    write_data('data', all_data_df_updated)
                     st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
                     st.balloons()
                     st.rerun()
