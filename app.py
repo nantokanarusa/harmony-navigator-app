@@ -1,4 +1,4 @@
-# app.py (v4.3.0 - The Transparent Contract / The Absolute Final)
+# app.py (v4.3.1 - The Final Polish / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -333,7 +333,8 @@ def write_data(sheet_name: str, df: pd.DataFrame):
 
 # --- E. UIコンポーネント ---
 def show_welcome_and_guide():
-    st.header("ようこそ、最初の航海士へ！「Harmony Navigator」取扱説明書")
+    st.header("ようこそ、最初の航海士へ！")
+    st.subheader("「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
     st.markdown("""
@@ -406,7 +407,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v4.3.0 - The Transparent Contract')
+    st.caption('v4.3.1 - The Final Polish')
 
     # セッション状態の初期化
     if 'auth_status' not in st.session_state:
@@ -514,8 +515,12 @@ def main():
                 st.rerun()
         else:
             if not user_data_df.empty and not user_data_df[Q_COLS].dropna().empty:
-                latest_q = user_data_df.sort_values(by='date', ascending=False)[Q_COLS].dropna().iloc[0]
-                default_q_values = {key.replace('q_', ''): int(val * 100) for key, val in latest_q.items()}
+                latest_q_row = user_data_df.sort_values(by='date', ascending=False)[Q_COLS].dropna()
+                if not latest_q_row.empty:
+                    latest_q = latest_q_row.iloc[0].to_dict()
+                    default_q_values = {key.replace('q_', ''): int(val * 100) for key, val in latest_q.items()}
+                else:
+                    default_q_values = st.session_state.q_values
             else:
                 default_q_values = st.session_state.q_values
             
@@ -602,7 +607,7 @@ def main():
                     encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                     
                     consent_record = user_data_df[user_data_df['user_id'] == user_id]
-                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else st.session_state.get('consent', False)
+                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else False
 
                     new_record.update({
                         'user_id': user_id, 'date': target_date, 'mode': mode_string,
@@ -686,7 +691,6 @@ def main():
             st.header("🔧 設定とガイド")
             st.subheader("データのエクスポート")
             if not user_data_df.empty:
-                # 復号したイベントログを含むデータフレームを作成
                 df_export = user_data_df.copy()
                 if 'event_log' in df_export.columns:
                     df_export['event_log_decrypted'] = df_export['event_log'].apply(st.session_state.enc_manager.decrypt_log)
@@ -729,7 +733,6 @@ def main():
             show_welcome_and_guide()
 
     else: # "NOT_LOGGED_IN"
-        st.header("ようこそ、航海士へ")
         show_welcome_and_guide()
         
         st.subheader("あなたの旅を、ここから始めましょう")
