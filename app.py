@@ -1,4 +1,4 @@
-# app.py (v7.0.2 - The Synthesis Reborn / The Absolute Final Code)
+# app.py (v7.0.3 - Cache Fix & Robustness Patch)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -13,6 +13,8 @@ import bcrypt
 import base64
 import gspread
 from google.oauth2.service_account import Credentials
+import plotly.graph_objects as go
+import plotly.express as px
 
 # --- A. 定数と基本設定 ---
 # (全ての定数を、省略せず、完全に記述)
@@ -124,6 +126,19 @@ EXPANDER_TEXTS = {
         **『誰と会った』『何をした』『何を感じた』**といった具体的な出来事や感情を、一言でも良いので書き留めてみましょう。
         
         後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
+        """,
+    'dashboard': """
+        **【航海チャートで、何がわかるの？】**
+        
+        1. **期間分析とRHI:**
+           - **平均調和度 (H̄):** この期間の、あなたの幸福の**平均点**です。
+           - **RHI (リスク調整済・幸福指数):** 平均点から、**変動と不調のリスク**を差し引いた、真の『幸福の実力値』です。この値が高いほど、あなたの幸福が**持続可能**で、逆境に強いことを示します。
+        
+        2. **インサイト・エンジン:**
+           - モデルの**計算値(H)**とあなたの**実感(G)**の『ズレ』を分析します。**「幸福なサプライズ」**や**「隠れた不満」**を発見する手がかりになります。
+
+        3. **調和度 (H) の推移:**
+           - あなたの幸福度の**時間的な「変動の物語」**を可視化します。どの出来事が幸福度を大きく変動させたのか、あなたの人生の動的なパターンを発見するための、最も強力なツールです。
         """
 }
 
@@ -166,41 +181,45 @@ class EncryptionManager:
             return "[復号に失敗しました：パスワードが違うか、データが破損している可能性があります]"
 
 # --- C. コア計算 & ユーティリティ関数 ---
+@st.cache_data
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     df_copy = df.copy()
     if df_copy.empty:
         return df_copy
     
-    numeric_cols = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness']
-    for col in numeric_cols:
+    # データ型の前処理を強化
+    numeric_s_element_cols = [col for col in df_copy.columns if col.startswith('s_element_')]
+    cols_to_convert = Q_COLS + S_COLS + numeric_s_element_cols + ['g_happiness']
+    for col in cols_to_convert:
         if col in df_copy.columns:
             df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
 
+    # s_{domain}の計算
     for domain, elements in LONG_ELEMENTS.items():
         element_cols = [f's_element_{e}' for e in elements if f's_element_{e}' in df_copy.columns]
         if element_cols:
-            df_copy['s_' + domain] = df_copy[element_cols].mean(axis=1, skipna=True)
+            df_copy['s_' + domain] = df_copy[element_cols].sum(axis=1) / df_copy[element_cols].notna().sum(axis=1)
+            df_copy['s_' + domain] = df_copy['s_' + domain].fillna(0) # 全てNAの場合は0
 
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
     
+    # S, U, H の計算
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
-    q_vectors = df_copy[Q_COLS].values
+    q_vectors = df_copy[Q_COLS].values / 100.0 # q_tも正規化
     
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
     def calculate_unity(row):
-        q_vec = np.array([float(row[col]) for col in Q_COLS], dtype=float)
-        s_vec_raw = np.array([float(row[col]) for col in S_COLS], dtype=float)
+        q_vec = row[Q_COLS].values.astype(float)
+        s_vec_raw = row[S_COLS].values.astype(float)
         
-        q_sum = np.sum(q_vec)
-        if q_sum == 0: return 0.0
-        q_vec_norm = q_vec / q_sum
+        if np.sum(q_vec) == 0: return 0.0
+        q_vec_norm = q_vec / np.sum(q_vec)
         
-        s_sum = np.sum(s_vec_raw)
-        if s_sum == 0: return 0.0
-        s_tilde = s_vec_raw / s_sum
+        if np.sum(s_vec_raw) == 0: return 0.0
+        s_tilde = s_vec_raw / np.sum(s_vec_raw)
         
         jsd_sqrt = jensenshannon(q_vec_norm, s_tilde)
         jsd = float(jsd_sqrt) ** 2
@@ -288,7 +307,7 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-# --- D. データ永続化層 (Direct gspread - The Phoenix Method) ---
+# --- D. データ永続化層 ---
 @st.cache_resource(ttl=3600)
 def get_gspread_client():
     try:
@@ -303,67 +322,48 @@ def get_gspread_client():
         st.exception(e)
         return None
 
-# ★★★★★ The Unchained Phoenix Correction ★★★★★
-@st.cache_data(ttl=10)
-def read_data(sheet_name: str, spreadsheet_id: str):
+@st.cache_data(ttl=60) # データは短時間キャッシュ
+def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
     gc = get_gspread_client()
-    if gc is None:
-        return pd.DataFrame()
+    if gc is None: return pd.DataFrame()
     try:
         sh = gc.open_by_key(spreadsheet_id)
-        if sheet_name == 'users':
-            worksheet = sh.worksheet("users")
-        elif sheet_name == 'data':
-            worksheet = sh.worksheet("data")
-        else:
-            return pd.DataFrame()
-        
+        worksheet = sh.worksheet(sheet_name)
         df = pd.DataFrame(worksheet.get_all_records())
-        if not df.empty:
-            if 'date' in df.columns:
-                df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-            numeric_cols = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
+        if not df.empty and 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
         return df
-    except gspread.exceptions.SpreadsheetNotFound:
-        st.error(f"スプレッドシート（ID: {spreadsheet_id}）が見つかりません。")
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"スプレッドシート内に '{sheet_name}' という名前のワークシートが見つかりません。")
+    except (gspread.exceptions.SpreadsheetNotFound, gspread.exceptions.WorksheetNotFound):
+        st.error(f"スプレッドシートまたはワークシート'{sheet_name}'が見つかりません。")
     except Exception as e:
-        st.error(f"データの読み込み中に予期せぬエラーが発生しました。")
-        st.exception(e)
+        st.error(f"データの読み込み中にエラー: {e}")
     return pd.DataFrame()
 
-def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame):
+def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
     gc = get_gspread_client()
     if gc is None:
         st.error("データベースクライアントが初期化されておらず、書き込みできません。")
-        return
+        return False
     try:
         sh = gc.open_by_key(spreadsheet_id)
-        if sheet_name == 'users':
-            worksheet = sh.worksheet("users")
-        elif sheet_name == 'data':
-            worksheet = sh.worksheet("data")
-        else:
-            return
-            
+        worksheet = sh.worksheet(sheet_name)
+        
         df_copy = df.copy()
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
-        df_copy = df_copy.astype(str).replace('nan', '')
+        df_copy = df_copy.astype(str).replace({'nan': '', 'NaT': ''})
         
         worksheet.clear()
-        worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist())
+        worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist(), value_input_option='USER_ENTERED')
         st.cache_data.clear()
+        return True
     except Exception as e:
-        st.error(f"データの書き込み中にエラーが発生しました。")
-        st.exception(e)
+        st.error(f"データの書き込み中にエラー: {e}")
+        return False
 
 # --- E. UIコンポーネント ---
+# (show_welcome_and_guideは変更ないので省略)
 def show_welcome_and_guide():
     st.header("ようこそ、最初の航海士へ！")
     st.subheader("「Harmony Navigator」取扱説明書")
@@ -435,18 +435,10 @@ def show_welcome_and_guide():
     
     ここの「同意」チェックボックスは、私たちが、あなたの**「日々の数値データ（幸福度のスコアなど）」**を、将来あなたが送信してくれるかもしれない**「匿名の統計情報」**と結びつけて、分析することへの許可をいただくためのものです。
     """)
-
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.2 - The Ultimate UX Polish')
-
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    # ★ 最初に、全ての調理道具を、完璧に準備する！ ★
-    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-    gspread_client = get_gspread_client()
-    if gspread_client is None:
-        st.stop()
+    st.caption('v7.0.3 - Cache Fix & Robustness Patch')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -455,7 +447,6 @@ def main():
         st.error("SecretsにスプレッドシートID (`users_sheet_id`, `data_sheet_id`) が設定されていません。")
         st.stop()
 
-    # セッション状態の初期化
     if 'auth_status' not in st.session_state:
         st.session_state.auth_status = "NOT_LOGGED_IN"
     if 'user_id' not in st.session_state:
@@ -465,6 +456,8 @@ def main():
     if 'q_values' not in st.session_state:
         st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
         st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
+    if 'consent' not in st.session_state:
+        st.session_state.consent = False
 
     if st.session_state.auth_status == "AWAITING_ID":
         st.header("【あなたの船が、完成しました】")
@@ -491,7 +484,7 @@ def main():
             submitted = st.form_submit_button("ロックを解除する")
 
             if submitted:
-                users_df = read_data(gspread_client, 'users', users_sheet_id)
+                users_df = read_data('users', users_sheet_id)
                 user_record = users_df[users_df['user_id'] == st.session_state.user_id]
                 if not user_record.empty and EncryptionManager.check_password(password_for_decrypt, user_record.iloc[0]['password_hash']):
                     st.session_state.enc_manager = EncryptionManager(password_for_decrypt)
@@ -505,7 +498,7 @@ def main():
     elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
         user_id = st.session_state.user_id
         
-        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
+        all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         else:
@@ -560,11 +553,15 @@ def main():
                 st.session_state.wizard_mode = False
                 st.rerun()
         else:
-            if not user_data_df.empty and not user_data_df[Q_COLS].dropna().empty:
-                latest_q_row = user_data_df.sort_values(by='date', ascending=False)[Q_COLS].dropna()
-                if not latest_q_row.empty:
-                    latest_q = latest_q_row.iloc[0].to_dict()
-                    default_q_values = {key.replace('q_', ''): int(val * 100) for key, val in latest_q.items()}
+            if not user_data_df.empty:
+                q_numeric_cols_exist = all(col in user_data_df.columns for col in Q_COLS)
+                if q_numeric_cols_exist:
+                    latest_q_row = user_data_df.sort_values(by='date', ascending=False)[Q_COLS].dropna(how='all')
+                    if not latest_q_row.empty:
+                        latest_q = latest_q_row.iloc[0].to_dict()
+                        default_q_values = {key.replace('q_', ''): int(val * 100) for key, val in latest_q.items() if pd.notna(val)}
+                    else:
+                        default_q_values = st.session_state.q_values
                 else:
                     default_q_values = st.session_state.q_values
             else:
@@ -585,9 +582,6 @@ def main():
         with tab1:
             st.header(f"今日の航海日誌を記録する")
             
-            with st.expander("▼ これは、何のために記録するの？"):
-                st.markdown(EXPANDER_TEXTS['s_t'])
-            
             st.markdown("##### 記録する日付")
             today = date.today()
             target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=7), max_value=today, label_visibility="collapsed")
@@ -596,7 +590,7 @@ def main():
                 st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
 
             st.markdown("##### 記録モード")
-            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ', '🔬 ディープ・ダイブ'), horizontal=True, label_visibility="collapsed")
+            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ (14項目)', '🔬 ディープ・ダイブ (37項目)'), horizontal=True, label_visibility="collapsed")
             
             active_elements = SHORT_ELEMENTS if 'クイック' in input_mode else LONG_ELEMENTS
             mode_string = 'quick' if 'クイック' in input_mode else 'deep'
@@ -615,7 +609,7 @@ def main():
                     with container:
                         elements_to_show = active_elements.get(domain, [])
                         if elements_to_show:
-                            with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**"):
+                            with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**", expanded=True):
                                 for element in elements_to_show:
                                     col_name = f's_element_{element}'
                                     default_val = int(latest_s_elements.get(col_name, 50))
@@ -656,93 +650,76 @@ def main():
                     new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
                     new_record.update(s_element_values)
                     
-                    s_domain_scores = {}
-                    for domain, elements in LONG_ELEMENTS.items():
-                        domain_scores_list = [new_record[f's_element_{e}'] for e in elements if pd.notna(new_record.get(f's_element_{e}'))]
-                        if domain_scores_list:
-                            s_domain_scores['s_' + domain] = int(round(np.mean(domain_scores_list)))
-                        else:
-                            s_domain_scores['s_' + domain] = pd.NA
-                    
                     encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                     
-                    consent_record = user_data_df[user_data_df['user_id'] == user_id]
-                    consent_status = consent_record['consent'].iloc[0] if not consent_record.empty else st.session_state.get('consent', False)
+                    consent_status = st.session_state.get('consent', False)
 
                     new_record.update({
                         'user_id': user_id, 'date': target_date, 'mode': mode_string,
                         'consent': consent_status,
                         'g_happiness': int(g_happiness), 'event_log': encrypted_log
                     })
-                    new_record.update({f'q_{d}': v / 100.0 for d, v in st.session_state.q_values.items()})
-                    new_record.update(s_domain_scores)
+                    new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
 
                     new_df_row = pd.DataFrame([new_record])
                     
                     if not all_data_df.empty:
-                        condition = (all_data_df['user_id'] == user_id) & (all_data_df['date'] == target_date)
+                        condition = (all_data_df['user_id'] == user_id) & (pd.to_datetime(all_data_df['date']).dt.date == target_date)
                         all_data_df = all_data_df[~condition]
 
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
                     all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
                     
-                    write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
-                    st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
-                    st.balloons()
-                    st.rerun()
+                    if write_data('data', data_sheet_id, all_data_df_updated):
+                        st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                         st.error("データの保存に失敗しました。後でもう一度お試しください。")
 
         with tab2:
             st.header('📊 あなたの航海チャート')
             with st.expander("▼ このチャートの見方", expanded=True):
                 st.markdown(EXPANDER_TEXTS['dashboard'])
 
-            if user_data_df.empty or len(user_data_df.dropna(subset=S_COLS, how='all')) < 1:
+            df_to_process = user_data_df.copy()
+            if df_to_process.empty or df_to_process[ALL_ELEMENT_COLS].dropna(how='all').empty:
                 st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
             else:
-                df_processed = calculate_metrics(user_data_df.dropna(subset=S_COLS, how='all').copy())
+                df_processed = calculate_metrics(df_to_process, alpha=0.6)
+                df_processed['date'] = pd.to_datetime(df_processed['date'])
                 
                 st.subheader("📈 期間分析とリスク評価 (RHI)")
-                with st.expander("▼ これは、あなたの幸福の『持続可能性』を評価する指標です", expanded=False):
-                    st.markdown("""
-                    - **平均調和度 (H̄):** この期間の、あなたの幸福の平均点です。
-                    - **変動リスク (σ):** 幸福度の浮き沈みの激しさです。値が小さいほど、安定した航海だったことを示します。
-                    - **不調日数割合:** 幸福度が、あなたが設定した「不調」のラインを下回った日の割合です。
-                    - **RHI (リスク調整済・幸福指数):** 平均点から、変動と不調のリスクを差し引いた、真の『幸福の実力値』です。この値が高いほど、あなたの幸福が持続可能で、逆境に強いことを示します。
-                    """)
-
+                
                 period_options = [7, 30, 90]
                 if len(df_processed) < 7:
                     st.info("期間分析には最低7日分のデータが必要です。記録を続けてみましょう！")
                 else:
-                    default_index = 1 if len(df_processed) >= 30 else 0
-                    selected_period = st.selectbox("分析期間を選択してください（日）:", period_options, index=default_index)
+                    valid_periods = [p for p in period_options if len(df_processed) >= p]
+                    default_index = len(valid_periods) - 1 if valid_periods else 0
+                    selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
 
-                    if len(df_processed) >= selected_period:
-                        df_period = df_processed.tail(selected_period)
+                    df_period = df_processed.tail(selected_period)
 
-                        st.markdown("##### あなたのリスク許容度を設定")
-                        col1, col2, col3 = st.columns(3)
-                        lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-                        gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-                        tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
+                    st.markdown("##### あなたのリスク許容度を設定")
+                    col1, col2, col3 = st.columns(3)
+                    lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
+                    gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
+                    tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
 
-                        rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                    rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
 
-                        st.markdown("##### 分析結果")
-                        col1a, col2a, col3a, col4a = st.columns(4)
-                        col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
-                        col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
-                        col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
-                        col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
-                    else:
-                        st.warning(f"分析には最低{selected_period}日分のデータが必要です。現在の記録は{len(df_processed)}日分です。")
+                    st.markdown("##### 分析結果")
+                    col1a, col2a, col3a, col4a = st.columns(4)
+                    col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
+                    col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
+                    col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
+                    col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
 
                 analyze_discrepancy(df_processed)
                 st.subheader('調和度 (H) の推移')
-                df_chart = df_processed.copy()
-                df_chart['date'] = pd.to_datetime(df_chart['date'], errors='coerce')
-                df_chart = df_chart.sort_values('date')
-                st.line_chart(df_chart.set_index('date')['H'])
+                st.line_chart(df_processed.set_index('date')['H'])
 
                 st.subheader('全記録データ（イベントログは暗号化されています）')
                 st.dataframe(user_data_df.drop(columns=['user_id']).sort_values(by='date', ascending=False).round(3))
@@ -771,14 +748,14 @@ def main():
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
 
                 if delete_submitted:
-                    users_df = read_data(gspread_client, 'users', users_sheet_id)
+                    users_df = read_data('users', users_sheet_id)
                     user_record = users_df[users_df['user_id'] == user_id]
                     if not user_record.empty and EncryptionManager.check_password(password_for_delete, user_record.iloc[0]['password_hash']):
                         users_df_updated = users_df[users_df['user_id'] != user_id]
-                        write_data(gspread_client, 'users', users_sheet_id, users_df_updated)
+                        write_data('users', users_sheet_id, users_df_updated)
                         
                         all_data_df_updated = all_data_df[all_data_df['user_id'] != user_id]
-                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
+                        write_data('data', data_sheet_id, all_data_df_updated)
                         
                         for key in list(st.session_state.keys()):
                             del st.session_state[key]
@@ -830,24 +807,25 @@ def main():
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
                         
-                        users_df = read_data(gspread_client, 'users', users_sheet_id)
+                        users_df = read_data('users', users_sheet_id)
                         new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw}])
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
-                        write_data(gspread_client, 'users', users_sheet_id, updated_users_df)
-                        
-                        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
-                        new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
-                        all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
-                        for col in all_cols_in_order:
-                             if col not in new_user_record.columns:
-                                new_user_record[col] = pd.NA
-                        all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
-                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
-
-                        st.session_state.user_id = new_user_id
-                        st.session_state.enc_manager = EncryptionManager(new_password)
-                        st.session_state.auth_status = "AWAITING_ID"
-                        st.rerun()
+                        if write_data('users', users_sheet_id, updated_users_df):
+                            all_data_df = read_data('data', data_sheet_id)
+                            new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
+                            
+                            all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+                            for col in all_cols_in_order:
+                                 if col not in new_user_record.columns:
+                                    new_user_record[col] = pd.NA
+                            all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
+                            
+                            if write_data('data', data_sheet_id, all_data_df_updated):
+                                st.session_state.user_id = new_user_id
+                                st.session_state.enc_manager = EncryptionManager(new_password)
+                                st.session_state.auth_status = "AWAITING_ID"
+                                st.session_state.consent = consent
+                                st.rerun()
 
         with door2:
             st.info("すでに「秘密の合い言葉」と「パスワード」をお持ちの方は、こちらから旅を続けてください。")
@@ -858,7 +836,7 @@ def main():
 
                 if submitted:
                     if user_id_input and password_input:
-                        users_df = read_data(gspread_client, 'users', users_sheet_id)
+                        users_df = read_data('users', users_sheet_id)
                         if not users_df.empty:
                             user_record = users_df[users_df['user_id'] == user_id_input]
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
