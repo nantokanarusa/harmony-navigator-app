@@ -1,4 +1,4 @@
-# app.py (v7.0.38 - Critical State Management Fix & Complete Code)
+# app.py (v7.0.39 - Critical q_t Loading Logic Fix & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -706,7 +706,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.38 - Critical State Management Fix & Complete Code')
+    st.caption('v7.0.39 - Critical q_t Loading Logic Fix & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -818,11 +818,15 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         
-        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-        latest_q_row = sortable_df[Q_COLS].dropna(how='all')
-        if not latest_q_row.empty:
-            latest_q = latest_q_row.iloc[0].to_dict()
-            st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q.items() if isinstance(val, (int, float)) and pd.notna(val)}
+        q_data_rows = user_data_df[Q_COLS].dropna(how='all')
+        
+        if not q_data_rows.empty:
+            valid_q_indices = q_data_rows.index
+            q_df = user_data_df.loc[valid_q_indices]
+            latest_q_row = q_df.sort_values(by='date', ascending=False).iloc[0]
+            
+            latest_q_dict = latest_q_row[Q_COLS].to_dict()
+            st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q_dict.items() if isinstance(val, (int, float)) and pd.notna(val)}
         
         st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
         st.rerun()
@@ -1178,7 +1182,7 @@ def main():
             st.subheader("このアプリについて")
             show_welcome_and_guide()
         
-    else: # "NOT_LOGGED_IN"
+    else: # NOT_LOGGED_IN
         show_welcome_and_guide()
         
         st.subheader("あなたの旅を、ここから始めましょう")
