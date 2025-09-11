@@ -1,4 +1,4 @@
-# app.py (v7.0.4 - ValueError Fix & Data Preprocessing Patch)
+# app.py (v7.0.5 - UX & New User Flow Polished)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -94,47 +94,35 @@ EXPANDER_TEXTS = {
     'q_t': """
         #### ▼ これは、何のために設定するの？
         これは、あなたの人生という航海で、**「どの宝島を目指すか」**を決める、最も重要な羅針盤です。あなたが「何を大切にしたいか」という**理想（情報秩序）**を、数値で表現します。
-        
         この設定が、あなたの日々の経験を評価するための**個人的な『ものさし』**となります。この「ものさし」がなければ、自分の航海が順調なのか、航路から外れているのかを知ることはできません。
-        
         （週に一度など、定期的に見直すのがおすすめです）
         """,
     's_t': """
         #### ▼ これは、何のために記録するの？
         ここでは、あなたの**現実の経験（実践秩序）**を記録します。
-        
         頭で考える理想ではなく、**今日一日を振り返って、実際にどう感じたか**を、各項目のスライダーで直感的に評価してください。
-        
         この「現実」の記録と、先ほど設定した「理想」の羅針盤とを比べることで、両者の間に存在する**『ズレ』**を初めて発見できます。この『ズレ』に気づくことこそが、自己理解と成長の第一歩です。
         """,
     'g_t': """
         #### ▼ これは、なぜ必要なの？
         この項目は、**あなたの直感的な全体評価**です。
-        
         細かいことは一度忘れて、「で、色々あったけど、今日の自分、全体としては何点だったかな？」という感覚を、一つのスライダーで表現してください。
-        
         アプリが計算したスコア（H）と、あなたの直感（G）がどれだけ一致しているか、あるいは**ズレているか**を知るための、非常に重要な手がかりとなります。
-        
         **『計算上は良いはずなのに、なぜか気分が晴れない』**といった、言葉にならない違和感や、**『予想外に楽しかった！』**という嬉しい発見など、貴重な自己発見のきっかけになります。
         """,
     'event_log': """
         #### ▼ なぜ書くのがおすすめ？
         これは、あなたの航海の**物語**を記録する場所です。
-        
         **『誰と会った』『何をした』『何を感じた』**といった具体的な出来事や感情を、一言でも良いので書き留めてみましょう。
-        
         後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
         """,
     'dashboard': """
         **【航海チャートで、何がわかるの？】**
-        
         1. **期間分析とRHI:**
            - **平均調和度 (H̄):** この期間の、あなたの幸福の**平均点**です。
            - **RHI (リスク調整済・幸福指数):** 平均点から、**変動と不調のリスク**を差し引いた、真の『幸福の実力値』です。この値が高いほど、あなたの幸福が**持続可能**で、逆境に強いことを示します。
-        
         2. **インサイト・エンジン:**
            - モデルの**計算値(H)**とあなたの**実感(G)**の『ズレ』を分析します。**「幸福なサプライズ」**や**「隠れた不満」**を発見する手がかりになります。
-
         3. **調和度 (H) の推移:**
            - あなたの幸福度の**時間的な「変動の物語」**を可視化します。どの出来事が幸福度を大きく変動させたのか、あなたの人生の動的なパターンを発見するための、最も強力なツールです。
         """
@@ -176,7 +164,7 @@ class EncryptionManager:
             decrypted_bytes = bytes([b ^ self.key[i % len(self.key)] for i, b in enumerate(encrypted_bytes)])
             return decrypted_bytes.decode('utf-8')
         except Exception:
-            return "[復号に失敗しました：パスワードが違うか、データが破損している可能性があります]"
+            return "[復号に失敗しました]"
 
 # --- C. コア計算 & ユーティリティ関数 ---
 @st.cache_data
@@ -185,21 +173,18 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     if df_copy.empty:
         return df_copy
     
-    # s_{domain}の計算
     for domain, elements in LONG_ELEMENTS.items():
         element_cols = [f's_element_{e}' for e in elements if f's_element_{e}' in df_copy.columns]
         if element_cols:
-            # 各行で有効なelementの数で割る
             df_copy['s_' + domain] = df_copy[element_cols].sum(axis=1) / df_copy[element_cols].notna().sum(axis=1)
-            df_copy['s_' + domain] = df_copy['s_' + domain].fillna(0) # 全てNAの場合は0
+            df_copy['s_' + domain] = df_copy['s_' + domain].fillna(0)
 
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
     
-    # S, U, H の計算
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
-    q_vectors = df_copy[Q_COLS].values / 100.0 # q_tも正規化
+    q_vectors = df_copy[Q_COLS].values
     
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
@@ -303,7 +288,6 @@ def get_gspread_client():
         return gspread.authorize(creds)
     except Exception as e:
         st.error("Google Sheetsへの認証に失敗しました。Secretsの設定とGCPのAPI設定を確認してください。")
-        st.exception(e)
         return None
 
 @st.cache_data(ttl=60)
@@ -399,9 +383,7 @@ def show_welcome_and_guide():
     st.subheader("🧑‍🔬 あなたは、ただのユーザーじゃない。「科学の冒険者」です！")
     st.info("""
     **【研究協力へのお願い（インフォームド・コンセント）】**
-    
     もし、ご協力いただけるのであれば、あなたが記録したデータを、**個人が特定できない形に完全に匿名化した上で**、この理論の科学的検証のための研究に利用させていただくことにご同意いただけますでしょうか。
-
     **【私たちの約束：ゼロ知識分析】**
     あなたのプライバシーは、何よりも優先されます。そのため、私たちは、あなたのイベントログのような、プライベートな記述データを、**直接収集することは一切ありません。**
     代わりに、私たちは、あなたがご自身の意思で、安全に研究に協力するための、**全く別の「研究協力ツール」**を、別途提供します。このツールは、
@@ -414,7 +396,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.4 - ValueError Fix & Data Preprocessing Patch')
+    st.caption('v7.0.5 - UX & New User Flow Polished')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -447,10 +429,13 @@ def main():
         st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
         
         if st.button("はい、安全に保管しました。旅を始める"):
-            st.session_state.auth_status = "LOGGED_IN_LOCKED"
+            # 修正点：二重パスワード入力をなくすため、直接UNLOCKEDへ
+            st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
             st.rerun()
 
     elif st.session_state.auth_status == "LOGGED_IN_LOCKED":
+        # このブロックは、古いセッションからの移行などのために残すが、
+        # 通常のログインフローでは使われなくなる
         st.header("🔒 心の金庫を開ける")
         st.info(f"ようこそ、`{st.session_state.user_id}` さん。")
         st.warning("航海日誌を読み書きするために、あなたのパスワードを入力して、このセッションのロックを解除してください。")
@@ -523,9 +508,10 @@ def main():
                     st.session_state.q_wizard_step += 1
                     st.rerun()
             else:
-                st.sidebar.success("診断完了！あなたの価値観の推定値です。")
-                estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
-                st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
+                if st.session_state.q_comparisons:
+                    st.sidebar.success("診断完了！あなたの価値観の推定値です。")
+                    estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
+                    st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                 st.session_state.wizard_mode = False
                 st.rerun()
         else:
@@ -537,7 +523,7 @@ def main():
                     if not latest_q_row.empty:
                         latest_q = latest_q_row.iloc[0].to_dict()
                         default_q_values = {
-                            key.replace('q_', ''): int(val * 100) 
+                            key.replace('q_', ''): int(val) 
                             for key, val in latest_q.items() 
                             if isinstance(val, (int, float)) and pd.notna(val)
                         }
@@ -567,7 +553,14 @@ def main():
             today = date.today()
             target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=365), max_value=today, label_visibility="collapsed")
             
-            if not user_data_df.empty and target_date in user_data_df['date'].values:
+            # 修正点：記録済みかどうかの判定をより厳密に
+            is_already_recorded = False
+            if not user_data_df.empty:
+                date_match = user_data_df[user_data_df['date'] == target_date]
+                if not date_match.empty and pd.notna(date_match.iloc[0].get('g_happiness')):
+                    is_already_recorded = True
+            
+            if is_already_recorded:
                 st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
 
             st.markdown("##### 記録モード")
@@ -580,10 +573,10 @@ def main():
                 s_element_values = {}
                 col1, col2 = st.columns(2)
                 
+                # 修正点：空のデータフレームでもエラーにならないように
+                latest_s_elements = pd.Series(dtype=float)
                 if not user_data_df.empty:
                     latest_s_elements = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False).iloc[0]
-                else:
-                    latest_s_elements = pd.Series(50, index=ALL_ELEMENT_COLS)
 
                 for i, domain in enumerate(DOMAINS):
                     container = col1 if i < 4 else col2
@@ -593,7 +586,10 @@ def main():
                             with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**", expanded=True):
                                 for element in elements_to_show:
                                     col_name = f's_element_{element}'
-                                    default_val = int(latest_s_elements.get(col_name, 50))
+                                    # 修正点：欠損値でもエラーにならないように
+                                    val = latest_s_elements.get(col_name, 50)
+                                    default_val = 50 if pd.isna(val) else int(val)
+                                    
                                     help_text = ELEMENT_DEFINITIONS.get(element, "")
                                     
                                     st.markdown(f"**{element}**")
@@ -640,8 +636,8 @@ def main():
                         'consent': consent_status,
                         'g_happiness': int(g_happiness), 'event_log': encrypted_log
                     })
-                    new_record.update({f'q_{d}': v / 100.0 for d, v in st.session_state.q_values.items()})
-                    
+                    new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+
                     new_df_row = pd.DataFrame([new_record])
                     
                     if not all_data_df.empty:
@@ -761,19 +757,13 @@ def main():
             st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
             st.markdown("---")
             st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
-            st.warning("""
-            この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています。
-            あなたの日記（イベントログ）は、**あなただけが知る「パスワード」**を鍵として、あなたのブラウザの中で**暗号化**されます。
-            """)
-            st.error("""
-            **【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません。**
-            私たちは、あなたのパスワードを、どこにも保存しません。そのため、従来のサービスのような**「パスワードリセット」機能は、存在しません。**
-            """)
+            st.warning("この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています...")
+            st.error("**【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません...**")
             st.markdown("---")
 
             with st.form("register_form"):
                 agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
-                new_password = st.text_input("パスワード（8文字以上、全てのデータを守る、あなただけの鍵です）", type="password")
+                new_password = st.text_input("パスワード（8文字以上）", type="password")
                 new_password_confirm = st.text_input("パスワード（確認用）", type="password")
                 consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
@@ -790,24 +780,14 @@ def main():
                         hashed_pw = EncryptionManager.hash_password(new_password)
                         
                         users_df = read_data('users', users_sheet_id)
-                        new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw}])
+                        new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent}])
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
                         if write_data('users', users_sheet_id, updated_users_df):
-                            all_data_df = read_data('data', data_sheet_id)
-                            new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
-                            
-                            all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
-                            for col in all_cols_in_order:
-                                 if col not in new_user_record.columns:
-                                    new_user_record[col] = pd.NA
-                            all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
-                            
-                            if write_data('data', data_sheet_id, all_data_df_updated):
-                                st.session_state.user_id = new_user_id
-                                st.session_state.enc_manager = EncryptionManager(new_password)
-                                st.session_state.auth_status = "AWAITING_ID"
-                                st.session_state.consent = consent
-                                st.rerun()
+                            st.session_state.user_id = new_user_id
+                            st.session_state.enc_manager = EncryptionManager(new_password)
+                            st.session_state.auth_status = "AWAITING_ID"
+                            st.session_state.consent = consent
+                            st.rerun()
 
         with door2:
             st.info("すでに「秘密の合い言葉」と「パスワード」をお持ちの方は、こちらから旅を続けてください。")
@@ -823,7 +803,11 @@ def main():
                             user_record = users_df[users_df['user_id'] == user_id_input]
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
                                 st.session_state.user_id = user_id_input
-                                st.session_state.auth_status = "LOGGED_IN_LOCKED"
+                                # 修正点：ここで復号マネージャーも作成し、直接UNLOCKEDへ
+                                st.session_state.enc_manager = EncryptionManager(password_input)
+                                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                                st.success("乗船に成功しました！")
+                                time.sleep(1)
                                 st.rerun()
                             else:
                                 st.error("合い言葉またはパスワードが間違っています。")
@@ -833,4 +817,4 @@ def main():
                         st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
-    main()
+    main()```
