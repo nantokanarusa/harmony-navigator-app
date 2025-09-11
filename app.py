@@ -1,4 +1,4 @@
-# app.py (v7.0.22 - Final Dashboard Logic & UX)
+# app.py (v7.0.24 - Final Data Pipeline & Code Completion)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -208,18 +208,33 @@ class EncryptionManager:
             return "[復号に失敗しました]"
 
 # --- C. コア計算 & ユーティリティ関数 ---
+def calculate_s_domains_from_elements(s_element_values: dict) -> dict:
+    s_domain_scores = {}
+    for domain, elements in LONG_ELEMENTS.items():
+        domain_scores_list = [
+            s_element_values[f's_element_{e}'] 
+            for e in elements 
+            if f's_element_{e}' in s_element_values and pd.notna(s_element_values[f's_element_{e}'])
+        ]
+        
+        if domain_scores_list:
+            s_domain_scores['s_' + domain] = int(round(np.mean(domain_scores_list)))
+        else:
+            s_domain_scores['s_' + domain] = pd.NA
+            
+    return s_domain_scores
+
 @st.cache_data
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     df_copy = df.copy()
     if df_copy.empty:
         return df_copy
     
-    for domain, elements in LONG_ELEMENTS.items():
-        element_cols = [f's_element_{e}' for e in elements if f's_element_{e}' in df_copy.columns]
-        if element_cols:
-            df_copy['s_' + domain] = df_copy[element_cols].sum(axis=1) / df_copy[element_cols].notna().sum(axis=1)
-            df_copy['s_' + domain] = df_copy['s_' + domain].fillna(0)
-
+    # ★★★ 修正箇所 ★★★
+    # s_domain列を、常にs_element列から再計算する
+    temp_s_domains = df_copy.apply(lambda row: pd.Series(calculate_s_domains_from_elements(row.to_dict())), axis=1)
+    df_copy[S_COLS] = temp_s_domains[S_COLS]
+    
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
@@ -583,7 +598,7 @@ def show_legal_documents():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.21 - Achievement Rate Visualization')
+    st.caption('v7.0.22 - Final Dashboard Logic')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -773,6 +788,10 @@ def main():
                     else:
                         new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
                         new_record.update(s_element_values)
+                        
+                        s_domain_scores = calculate_s_domains_from_elements(s_element_values)
+                        new_record.update(s_domain_scores)
+                        
                         encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                         
                         user_info = users_df[users_df['user_id'] == user_id]
@@ -811,7 +830,7 @@ def main():
             if df_to_process.empty or df_to_process.drop(columns=['user_id', 'date', 'mode', 'consent', 'event_log'], errors='ignore').dropna(how='all').empty:
                 st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
             else:
-                df_processed = calculate_metrics(df_to_process.dropna(subset=ALL_ELEMENT_COLS, how='all'), alpha=0.6)
+                df_processed = calculate_metrics(df_to_process, alpha=0.6)
                 if 'date' in df_processed.columns:
                     df_processed['date'] = pd.to_datetime(df_processed['date'])
                     df_processed = df_processed.sort_values('date')
@@ -889,7 +908,7 @@ def main():
 
                     with col_chart2:
                         st.markdown("##### 価値-充足 ギャップ分析")
-                        st.caption("算出方法: ギャップ = 理想の構成比 (%) - 現実の構成比 (%)")
+                        st.caption("算出方法: ギャップ(%) = 理想の構成比 - 現実の構成比")
                         
                         q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
                         s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
