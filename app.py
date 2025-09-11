@@ -1,4 +1,4 @@
-# app.py (v7.0.16 - Advanced Dashboard Visualization)
+# app.py (v7.0.17 - Advanced Dashboard Visualization)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -23,7 +23,6 @@ DOMAIN_NAMES_JP_DICT = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
     'autonomy': '4. 自律・成長', 'finance': '5. 経済', 'leisure': '6. 余暇・心理', 'competition': '7. 競争'
 }
-# 順序を保証したリストも用意
 DOMAIN_NAMES_JP_VALUES = [DOMAIN_NAMES_JP_DICT[d] for d in DOMAINS]
 
 SHORT_ELEMENTS = {
@@ -538,7 +537,7 @@ def show_legal_documents():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.16 - Advanced Dashboard Visualization')
+    st.caption('v7.0.17 - Advanced Dashboard Visualization')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -702,9 +701,8 @@ def main():
                                     val = latest_s_elements.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
                                     
-                                    help_text = ELEMENT_DEFINITIONS.get(element, "")
                                     st.markdown(f"**{element}**")
-                                    st.caption(help_text)
+                                    st.caption(ELEMENT_DEFINITIONS.get(element, ""))
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
                                     st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                                     s_element_values[col_name] = int(score)
@@ -801,6 +799,57 @@ def main():
                     analyze_discrepancy(df_processed)
                     st.subheader('調和度 (H) の推移')
                     st.line_chart(df_processed.set_index('date')['H'])
+
+                    # ★★★ ここからが新機能 ★★★
+                    st.subheader("🔎 構造分析：あなたの理想と現実")
+                    col_chart1, col_chart2 = st.columns(2)
+                    
+                    with col_chart1:
+                        st.markdown("##### 理想 vs 現実 レーダーチャート")
+                        
+                        avg_q = df_period[Q_COLS].mean().values
+                        avg_s = df_period[S_COLS].mean().values
+
+                        fig = go.Figure()
+
+                        fig.add_trace(go.Scatterpolar(
+                              r=avg_s,
+                              theta=DOMAIN_NAMES_JP_VALUES,
+                              fill='toself',
+                              name='現実 (平均充足度)'
+                        ))
+                        fig.add_trace(go.Scatterpolar(
+                              r=avg_q,
+                              theta=DOMAIN_NAMES_JP_VALUES,
+                              fill='none',
+                              name='理想 (価値観)'
+                        ))
+
+                        fig.update_layout(
+                          polar=dict(
+                            radialaxis=dict(
+                              visible=True,
+                              range=[0, 100]
+                            )),
+                          showlegend=True
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with col_chart2:
+                        st.markdown("##### 価値-充足 ギャップ分析")
+                        gap_data = pd.DataFrame({
+                            'domain': DOMAIN_NAMES_JP_VALUES,
+                            'gap': avg_q - avg_s
+                        }).sort_values('gap', ascending=False)
+                        
+                        fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h',
+                                     color='gap',
+                                     color_continuous_scale='RdBu',
+                                     color_continuous_midpoint=0,
+                                     labels={'gap':'ギャップ (理想 - 現実)', 'domain':'ドメイン'})
+                        fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                    # ★★★ ここまでが新機能 ★★★
 
                     st.subheader('全記録データ')
                     df_display = user_data_df.copy()
