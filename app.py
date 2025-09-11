@@ -1,4 +1,4 @@
-# app.py (v7.0.29 - Final SyntaxError Fix)
+# app.py (v7.0.30 - Quick Log UI Enhancement)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -212,35 +212,52 @@ def calculate_s_domains_from_row(row: pd.Series) -> pd.Series:
 
 @st.cache_data
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
+    """
+    日次のS, U, H指標をデータフレームに追加する。
+    記録モード('mode'列)に応じて、s_domainの計算方法を切り替える。
+    """
     df_copy = df.copy()
     if df_copy.empty:
         return df_copy
-    
-    s_domain_updates = df_copy.apply(
-        lambda row: calculate_s_domains_from_row(row) if pd.isna(row[S_COLS]).any() else row[S_COLS],
-        axis=1
-    )
+
+    # s_domainの値を、mode列に基づいて計算/選択する
+    def get_s_domains_based_on_mode(row):
+        if row.get('mode') == 'deep':
+            # 'deep'モードの場合は、s_element列からs_domainを計算する
+            return calculate_s_domains_from_row(row)
+        else:
+            # 'quick'モードまたはmodeが未指定の場合は、既存のs_domain列をそのまま使用する
+            return row[S_COLS]
+
+    # applyを使って、各行に適切なs_domain値を設定する
+    s_domain_updates = df_copy.apply(get_s_domains_based_on_mode, axis=1)
     df_copy[S_COLS] = s_domain_updates
-    
+
+    # NaN値を0で埋める（計算のため）
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
     
+    # ここから先のS, U, Hの計算ロジックは変更なし
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
     q_vectors = df_copy[Q_COLS].values / 100.0
     
+    # np.nansumを使用して、NaNが含まれていても安全に計算
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
     def calculate_unity(row):
         q_vec = row[Q_COLS].values.astype(float)
         s_vec_raw = row[S_COLS].values.astype(float)
         
+        # q_vecの合計が0の場合は、価値が設定されていないので一致度を0とする
         if np.sum(q_vec) == 0: return 0.0
         q_vec_norm = q_vec / np.sum(q_vec)
         
+        # s_vecの合計が0の場合は、充足が全くないので一致度を0とする
         if np.sum(s_vec_raw) == 0: return 0.0
         s_tilde = s_vec_raw / np.sum(s_vec_raw)
         
+        # Jensen-Shannon Divergenceを計算
         jsd_sqrt = jensenshannon(q_vec_norm, s_tilde)
         jsd = float(jsd_sqrt) ** 2
         return 1.0 - jsd
@@ -407,25 +424,19 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
-        # データベースのスキーマに存在するすべての列を定義
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
             db_schema_cols = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
         
-        # データフレームに不足している列を追加
         for col in db_schema_cols:
             if col not in df_copy.columns:
-                df_copy[col] = '' # または pd.NA や np.nan
+                df_copy[col] = '' 
 
-        # スキーマの順序に列を並び替え
         df_to_write = df_copy[db_schema_cols]
-        
-        # Google Sheetsに書き込む前に、NaNやNaTを空文字に変換
         df_to_write = df_to_write.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
         
         worksheet.clear()
         worksheet.update([df_to_write.columns.values.tolist()] + df_to_write.values.tolist(), value_input_option='USER_ENTERED')
-        # キャッシュをクリアして、次回の読み込みで最新のデータを取得
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -643,7 +654,7 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.29 - Final SyntaxError Fix')
+    st.caption('v7.0.30 - Quick Log UI Enhancement')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -795,7 +806,11 @@ def main():
                     mode_string = 'quick'
                     st.info("今日一日を振り返り、7つの幸福の領域が、それぞれどれくらい満たされていたかを評価してください。")
                     for domain in DOMAINS:
-                        s_domain_values['s_' + domain] = st.slider(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", 0, 100, 50)
+                        st.markdown(f"**{DOMAIN_NAMES_JP_DICT[domain]}**")
+                        with st.expander("▼ このドメインには、どんな「材料」が含まれる？"):
+                            for element in LONG_ELEMENTS[domain]:
+                                st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
+                        s_domain_values['s_' + domain] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=50, key=f"s_{domain}", label_visibility="collapsed")
                 
                 else:
                     mode_string = 'deep'
