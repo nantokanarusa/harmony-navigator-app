@@ -1,4 +1,4 @@
-# app.py (v7.0.35 - Wording Refinement & Complete Code)
+# app.py (v7.0.35 - Mandatory Wizard Flow Fix & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -412,12 +412,11 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
-            # ここを【修正版】の論理的な順序に合わせる
             db_schema_cols = (
                 ['user_id', 'date', 'consent', 'mode'] + 
                 Q_COLS + S_COLS + 
                 ['g_happiness', 'event_log'] +
-                [f's_element_{e}' for d in DOMAINS for e in LONG_ELEMENTS[d]]
+                sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
             )
         
         for col in db_schema_cols:
@@ -708,7 +707,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.35 - Wording Refinement & Complete Code')
+    st.caption('v7.0.35 - Mandatory Wizard Flow Fix & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -969,7 +968,6 @@ def main():
                         avg_q = df_period[Q_COLS].mean().values
                         avg_s = df_period[S_COLS].mean().values
                         
-                        # 理想の形(価値観)と、それに対して現実(経験)が何%達成できたかを表示
                         s_achieved_ratio = avg_s / 100.0 
                         s_plot = avg_q * s_achieved_ratio
 
@@ -1183,8 +1181,8 @@ def main():
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
                                 st.session_state.user_id = user_id_input
                                 st.session_state.enc_manager = EncryptionManager(password_input)
-                                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
-                                st.success("乗船に成功しました！")
+                                st.session_state.auth_status = "CHECKING_USER_DATA" # 修正点
+                                st.success("乗船に成功しました！データを読み込んでいます...")
                                 time.sleep(1)
                                 st.rerun()
                             else:
