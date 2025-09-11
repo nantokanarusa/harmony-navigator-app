@@ -1,4 +1,4 @@
-# app.py (v7.0.46 - Robust Data Migration & Final Fix)
+# app.py (v7.0.47 - Final Cache Invalidation Fix & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -414,7 +414,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
         if 'record_timestamp' in df_copy.columns:
-            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp']).dt.tz_localize(None).dt.isoformat()
+            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp'], errors='coerce').dt.tz_localize(None).dt.isoformat()
         
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
@@ -435,7 +435,10 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         worksheet.clear()
         worksheet.update([df_to_write.columns.values.tolist()] + df_to_write.values.tolist(), value_input_option='USER_ENTERED')
+        
         st.cache_data.clear()
+        st.cache_resource.clear()
+        
         return True
     except Exception as e:
         st.error(f"データの書き込み中にエラー: {e}")
@@ -713,11 +716,9 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
-# (ここから下のmain関数と、その中のUI描画コードは、
-# 前回のv7.0.38の回答と全く同じです。省略せずに全て記述します。)
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.46 - Robust Data Migration & Final Fix')
+    st.caption('v7.0.47 - Final Cache Invalidation Fix & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -823,7 +824,6 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
-            # マイグレーションをこの段階で実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
             if not has_q_data:
