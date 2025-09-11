@@ -1,4 +1,4 @@
-# app.py (v7.0.0 - The Synthesis / The Absolute Final Code)
+# app.py (v7.0.1 - The True Phoenix / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,7 +16,8 @@ from google.oauth2.service_account import Credentials
 
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-# (全ての定数を、省略せず、完全に記述)
+
+# ドメインとエレメントの定義
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -294,8 +295,8 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
 def get_gspread_client():
     try:
         scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
+            "https.www.googleapis.com/auth/spreadsheets",
+            "https.www.googleapis.com/auth/drive"
         ]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         return gspread.authorize(creds)
@@ -439,7 +440,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.0 - The Synthesis / The Absolute Final Code')
+    st.caption('v7.0.1 - The True Phoenix')
 
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     # ★ 最初に、全ての調理道具を、完璧に準備する！ ★
