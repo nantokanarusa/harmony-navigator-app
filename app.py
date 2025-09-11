@@ -1,4 +1,4 @@
-# app.py (v7.0.20 - Final Dashboard Redesign & UX Polish)
+# app.py (v7.0.21 - Achievement Rate Visualization)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -118,7 +118,6 @@ EXPANDER_TEXTS = {
         **『誰と会った』『何をした』『何を感じた』**といった具体的な出来事や感情を、一言でも良いので書き留めてみましょう。
         後でグラフを見たときに、数値だけでは分からない、**幸福度の浮き沈みの『なぜ？』**を解き明かす鍵となります。グラフの「山」や「谷」と、この記録を結びつけることで、あなたの幸福のパターンがより鮮明に見えてきます。
         """,
-    # ★★★ 修正箇所 ★★★
     'dashboard': """
         **【航海チャートで、何がわかるの？】**
 
@@ -584,7 +583,7 @@ def show_legal_documents():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.20 - Final Dashboard Redesign & UX Polish')
+    st.caption('v7.0.21 - Achievement Rate Visualization')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -856,17 +855,24 @@ def main():
                     with col_chart1:
                         st.markdown("##### 理想 vs 現実 レーダーチャート")
                         
+                        # ★★★ 修正箇所 ★★★
                         avg_q = df_period[Q_COLS].mean().values
                         avg_s = df_period[S_COLS].mean().values
+                        
+                        # 「達成率」を計算
+                        # s_achieved = q * (s / 100)
+                        s_achieved = avg_q * (avg_s / 100.0)
 
                         fig = go.Figure()
 
+                        # 緑のエリア（現実の達成度）
                         fig.add_trace(go.Scatterpolar(
-                              r=avg_s,
+                              r=s_achieved,
                               theta=DOMAIN_NAMES_JP_VALUES,
                               fill='toself',
-                              name='現実 (平均充足度)'
+                              name='現実 (達成度)'
                         ))
+                        # 青い線（理想の目標値）
                         fig.add_trace(go.Scatterpolar(
                               r=avg_q,
                               theta=DOMAIN_NAMES_JP_VALUES,
@@ -880,22 +886,27 @@ def main():
                               visible=True,
                               range=[0, 100]
                             )),
-                          showlegend=True
+                          showlegend=True,
+                          legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01)
                         )
                         st.plotly_chart(fig, use_container_width=True)
 
                     with col_chart2:
                         st.markdown("##### 価値-充足 ギャップ分析")
+                        
+                        # ★★★ 修正箇所 ★★★
+                        # ギャップを「理想 - 現実の達成度」で計算
                         gap_data = pd.DataFrame({
                             'domain': DOMAIN_NAMES_JP_VALUES,
-                            'gap': avg_q - avg_s
+                            'gap': avg_q - s_achieved
                         }).sort_values('gap', ascending=False)
                         
                         fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h',
                                      color='gap',
                                      color_continuous_scale='RdBu',
                                      color_continuous_midpoint=0,
-                                     labels={'gap':'ギャップ (理想 - 現実)', 'domain':'ドメイン'})
+                                     labels={'gap':'ギャップ (理想 - 達成度)', 'domain':'ドメイン'},
+                                     title="+: 課題, -: 隠れた強み")
                         fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                         st.plotly_chart(fig_bar, use_container_width=True)
 
@@ -915,50 +926,57 @@ def main():
             with st.form("profile_form"):
                 current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
                 
+                # ★★★ 修正箇所 ★★★
+                def get_safe_index(options, value):
+                    try:
+                        return options.index(value)
+                    except ValueError:
+                        return 0 # 見つからない場合は「未選択」
+
                 age_group = st.selectbox(
                     "年代を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['age_group'],
-                    index=DEMOGRAPHIC_OPTIONS['age_group'].index(current_profile.get('age_group', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group', '未選択'))
                 )
                 gender = st.selectbox(
                     "性別を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['gender'],
-                    index=DEMOGRAPHIC_OPTIONS['gender'].index(current_profile.get('gender', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender', '未選択'))
                 )
                 occupation_category = st.selectbox(
                     "最も近い職業カテゴリを選択してください",
                     options=DEMOGRAPHIC_OPTIONS['occupation_category'],
-                    index=DEMOGRAPHIC_OPTIONS['occupation_category'].index(current_profile.get('occupation_category', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category', '未選択'))
                 )
                 income_range = st.selectbox(
                     "世帯年収の範囲を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['income_range'],
-                    index=DEMOGRAPHIC_OPTIONS['income_range'].index(current_profile.get('income_range', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range', '未選択'))
                 )
                 marital_status = st.selectbox(
                     "婚姻状況を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['marital_status'],
-                    index=DEMOGRAPHIC_OPTIONS['marital_status'].index(current_profile.get('marital_status', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status', '未選択'))
                 )
                 has_children = st.selectbox(
                     "お子様の有無を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['has_children'],
-                    index=DEMOGRAPHIC_OPTIONS['has_children'].index(current_profile.get('has_children', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['has_children'], current_profile.get('has_children', '未選択'))
                 )
                 living_situation = st.selectbox(
                     "現在の居住形態を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['living_situation'],
-                    index=DEMOGRAPHIC_OPTIONS['living_situation'].index(current_profile.get('living_situation', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['living_situation'], current_profile.get('living_situation', '未選択'))
                 )
                 chronic_illness = st.selectbox(
                     "慢性的な疾患の有無を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['chronic_illness'],
-                    index=DEMOGRAPHIC_OPTIONS['chronic_illness'].index(current_profile.get('chronic_illness', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['chronic_illness'], current_profile.get('chronic_illness', '未選択'))
                 )
                 country = st.selectbox(
                     "居住国を選択してください",
                     options=DEMOGRAPHIC_OPTIONS['country'],
-                    index=DEMOGRAPHIC_OPTIONS['country'].index(current_profile.get('country', '未選択'))
+                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['country'], current_profile.get('country', '未選択'))
                 )
                 
                 profile_submitted = st.form_submit_button("プロフィールを保存する")
