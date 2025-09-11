@@ -1,4 +1,4 @@
-# app.py (v7.0.28 - SyntaxError Fix)
+# app.py (v7.0.29 - Final SyntaxError Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -117,7 +117,7 @@ EXPANDER_TEXTS = {
         ---
 
         #### 2. **構造分析：あなたの理想と現実** - 心のレントゲン写真
-        このセクションは、期間中のあなたの平均的な心の状態を、**構造的**に分析します。
+        このセクションは、期間中のあなたの平均的な心のの状態を、**構造的**に分析します。
         
         - **理想 vs 現実 レーダーチャート**:
             - **これは何？**: あなたの**「理想の幸福の形（青い線）」**と、その理想に対して**「現実がどれだけ達成できたか（緑のエリア）」**を重ね合わせたものです。
@@ -206,8 +206,6 @@ def calculate_s_domains_from_row(row: pd.Series) -> pd.Series:
         if domain_scores_list:
             s_domain_scores['s_' + domain] = int(round(np.mean(domain_scores_list)))
         else:
-            # s_element列が存在しない、またはすべてNaNの場合、
-            # 既存のs_domain列があればそれを維持、なければNaN
             s_domain_scores['s_' + domain] = row.get('s_' + domain, np.nan)
             
     return pd.Series(s_domain_scores)
@@ -218,7 +216,6 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     if df_copy.empty:
         return df_copy
     
-    # s_domain列が存在しない、またはNaNを含む行に対してのみ、s_elementから再計算
     s_domain_updates = df_copy.apply(
         lambda row: calculate_s_domains_from_row(row) if pd.isna(row[S_COLS]).any() else row[S_COLS],
         axis=1
@@ -611,14 +608,10 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
     """
     EXPECTED_COLUMNS = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
-    # DataFrameに存在する列のみを対象にする
-    existing_expected_columns = [col for col in EXPECTED_COLUMNS if col in df.columns]
-    
     missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
 
     if not missing_cols:
-        # 順番を揃えて返す
-        final_order = existing_expected_columns + [c for c in df.columns if c not in EXPECTED_COLUMNS]
+        final_order = [col for col in EXPECTED_COLUMNS if col in df.columns] + [c for c in df.columns if c not in EXPECTED_COLUMNS]
         return df[final_order]
 
     st.info("古いデータ形式を検出しました。最新の形式に自動的に更新します...")
@@ -627,22 +620,17 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
     for col in missing_cols:
         df_migrated[col] = pd.NA
 
-    # 確実に存在する列で順序を整える
     final_cols_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns]
     df_migrated = df_migrated[final_cols_order]
 
-    # このユーザーのデータのみを更新して、全体のデータを書き戻す
     try:
         all_data_df = read_data('data', sheet_id)
         if not all_data_df.empty:
-            # 他のユーザーのデータは保持
             other_users_data = all_data_df[all_data_df['user_id'] != user_id]
-            # このユーザーの全データを更新版に差し替え
             all_data_df_updated = pd.concat([other_users_data, df_migrated], ignore_index=True)
 
             if write_data('data', sheet_id, all_data_df_updated):
                 st.success("データ形式の更新が完了し、永続的に保存しました。")
-                # 更新後のデータを返す
                 return df_migrated
             else:
                 st.error("スキーマ更新の保存に失敗しました。一時的なデータで続行します。")
@@ -655,7 +643,7 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.28 - SyntaxError Fix')
+    st.caption('v7.0.29 - Final SyntaxError Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -700,7 +688,6 @@ def main():
 
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
-            # ここでスキーマのマイグレーションを実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
         else:
             user_data_df = pd.DataFrame()
@@ -1154,4 +1141,4 @@ def main():
                         st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
-    main()```
+    main()
