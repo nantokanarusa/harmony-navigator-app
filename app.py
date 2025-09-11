@@ -1,4 +1,4 @@
-# app.py (v7.0.45 - Refactored for Readability & Maintainability)
+# app.py (v7.0.46 - Robust Data Migration & Final Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -713,9 +713,11 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
+# (ここから下のmain関数と、その中のUI描画コードは、
+# 前回のv7.0.38の回答と全く同じです。省略せずに全て記述します。)
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.45 - Refactored for Readability & Maintainability')
+    st.caption('v7.0.46 - Robust Data Migration & Final Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -821,6 +823,7 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+            # マイグレーションをこの段階で実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
             if not has_q_data:
@@ -1212,8 +1215,7 @@ def main():
             st.subheader("このアプリについて")
             show_welcome_and_guide()
         
-    else:
-        # NOT_LOGGED_IN
+    else: # NOT_LOGGED_IN
         show_welcome_and_guide()
         st.subheader("あなたの旅を、ここから始めましょう")
         show_legal_documents()
