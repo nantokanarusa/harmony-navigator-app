@@ -1,4 +1,4 @@
-# app.py (v7.0.17 - Advanced Dashboard Visualization)
+# app.py (v7.0.19 - Updated Privacy Policy & Final Polish)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -129,6 +129,18 @@ EXPANDER_TEXTS = {
            - あなたの幸福度の**時間的な「変動の物語」**を可視化します。どの出来事が幸福度を大きく変動させたのか、あなたの人生の動的なパターンを発見するための、最も強力なツールです。
         """
 }
+DEMOGRAPHIC_OPTIONS = {
+    'age_group': ['未選択', '19歳以下', '20-29歳', '30-39歳', '40-49歳', '50-59歳', '60歳以上'],
+    'gender': ['未選択', '男性', '女性', 'その他', '回答しない'],
+    'occupation_category': ['未選択', '経営者・役員', '会社員（総合職）', '会社員（一般職）', '公務員', '専門職（医師、弁護士など）', '自営業・フリーランス', '学生', '主婦・主夫', '退職・無職', 'その他'],
+    'income_range': ['未選択', '200万円未満', '200-400万円未満', '400-600万円未満', '600-800万円未満', '800-1000万円未満', '1000万円以上', '回答しない'],
+    'marital_status': ['未選択', '未婚', '既婚', '離婚・死別', 'その他'],
+    'has_children': ['未選択', 'いない', 'いる'],
+    'living_situation': ['未選択', '一人暮らし', 'パートナーと同居', '家族（親・子・兄弟など）と同居', '友人・その他とシェア', 'その他'],
+    'chronic_illness': ['未選択', 'ない', 'ある'],
+    'country': ['未選択', '日本', 'アメリカ合衆国', 'その他']
+}
+
 
 # --- B. 暗号化エンジン ---
 class EncryptionManager:
@@ -338,10 +350,13 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
 
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-
-        numeric_cols_candidate = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness']
-        for col in [c for c in numeric_cols_candidate if c in df.columns]:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+        demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
+        all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
+        
+        for col in [c for c in all_cols_to_process if c in df.columns]:
+            if col not in demographic_cols:
+                 df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df
     except (gspread.exceptions.SpreadsheetNotFound, gspread.exceptions.WorksheetNotFound):
@@ -415,6 +430,7 @@ def show_welcome_and_guide():
     ここの「同意」チェックボックスは、私たちが、あなたの**「日々の数値データ（幸福度のスコアなど）」**を、研究分析に利用させていただくことへの許可をいただくためのものです。
     """)
 
+# ★★★ 修正箇所 ★★★
 def show_legal_documents():
     with st.expander("📜 **利用規約**を読む"):
         st.markdown("""
@@ -482,17 +498,20 @@ def show_legal_documents():
 
         **2. 取得する情報と利用目的**
         本アプリは、ユーザーの皆様から以下の情報を取得し、それぞれの目的のために利用します。
-        (1) アカウント情報
+        
+        **(1) アカウント情報**
         - **取得する情報**:
             - **匿名ユーザーID**: 本アプリが自動生成する、個人とは一切結びつかないランダムな識別子。
             - **パスワードのハッシュ値**: ユーザーが設定したパスワードを、復元不可能な形式（bcrypt）で暗号化したデータ。
             - **研究協力への同意状況**: 研究協力に関する同意の有無。
+            - **プロフィール情報（任意）**: ユーザーが任意で提供する、年代、性別、職業カテゴリ、年収範囲などの人口統計学的情報。これらの情報は、個人を特定しないカテゴリ形式で収集されます。
         - **利用目的**:
             - ユーザーのアカウントを識別し、ログイン機能を安全に提供するため。
             - パスワードの照合による本人確認のため。
             - 研究協力への同意状況を管理するため。
-        - **特記事項**: 当方は、ユーザーのメールアドレス、氏名、ニックネームなど、**個人を特定できる情報を一切取得しません。**
-        (2) ユーザーが記録するデータ
+        - **特記事項**: 当方は、ユーザーのメールアドレス、氏名、ニックネームなど、**個人を特定できる情報を一切取得しません。** プロフィール情報の提供は完全に任意であり、提供しない場合でもアプリの機能に一切の制限はありません。
+
+        **(2) ユーザーが記録するデータ**
         - **取得する情報**:
             - **価値重みデータ (q_t)**: ユーザーが設定する、幸福の各ドメインに対する重要度の配分（数値データ）。
             - **充足度データ (s_t)**: ユーザーが日々記録する、幸福の各要素の充足度（数値データ）。
@@ -501,11 +520,12 @@ def show_legal_documents():
         - **利用目的**:
             - 本アプリの核心機能である、幸福度の可視化（調和度H、RHI等の計算）、パターン分析、およびユーザー自身の自己理解と内省を支援するために利用します。
         - **特記事項**: 当方は、**暗号化されたイベントログを復号する手段を持ちません。** したがって、ユーザーが記録した日記の内容を、当方が閲覧することは物理的に不可能です（ゼロ知識アーキテクチャ）。
-        (3) 研究利用に関する情報（ユーザーが別途同意した場合のみ）
+
+        **(3) 研究利用に関する情報（ユーザーが研究協力に同意した場合のみ）**
         - **取得する情報**:
-            - 上記(1)および(2)で取得する情報のうち、**イベントログを除く、完全に匿名化された数値データ**。
+            - 上記(1)および(2)で取得する情報のうち、**イベントログを除く、完全に匿名化された数値データおよびプロフィール情報**。
         - **利用目的**:
-            - 本アプリの基盤となる幸福論の科学的妥当性を検証するための、統計的な学術研究に利用します。個人が特定される形で研究結果が公表されることは一切ありません。
+            - 本アプリの基盤となる幸福論の科学的妥当性を検証するための、統計的な学術研究に利用します。例えば、年代や職業によって幸福のパターンに違いが見られるか、といった分析を行います。個人が特定される形で研究結果が公表されることは一切ありません。
 
         **3. 情報の第三者提供**
         当方は、以下の場合を除き、ユーザーの情報を第三者に提供することはありません。
@@ -516,7 +536,7 @@ def show_legal_documents():
         **4. ユーザーの権利**
         ユーザーは、本アプリにおいて、自らのデータに対する以下の権利を有します。
         - **アクセス権およびポータビリティ権**: いつでも自身の全データを、復号された状態でダウンロード（エクスポート）することができます。
-        - **訂正権**: アプリケーションを通じて、自身の記録データを修正することができます。
+        - **訂正権**: アプリケーションを通じて、自身の記録データおよびプロフィール情報を修正することができます。
         - **削除権（忘れられる権利）**: いつでも自身のアカウントと、サーバーに保存されている全ての関連データを完全に削除することができます。
 
         **5. 安全管理措置**
@@ -533,11 +553,10 @@ def show_legal_documents():
         - **事業者名**: [あなたの氏名または事業名]
         - **連絡先**: [あなたの連絡先メールアドレスなど]
         """)
-
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.17 - Advanced Dashboard Visualization')
+    st.caption('v7.0.19 - Updated Privacy Policy & Final Polish')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -577,6 +596,9 @@ def main():
         user_id = st.session_state.user_id
         
         all_data_df = read_data('data', data_sheet_id)
+        users_df = read_data('users', users_sheet_id)
+        user_info = users_df[users_df['user_id'] == user_id]
+
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         else:
@@ -726,7 +748,6 @@ def main():
                         new_record.update(s_element_values)
                         encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                         
-                        users_df = read_data('users', users_sheet_id)
                         user_info = users_df[users_df['user_id'] == user_id]
                         consent_status = user_info['consent'].iloc[0] if not user_info.empty and 'consent' in user_info.columns else False
 
@@ -771,14 +792,13 @@ def main():
                 st.subheader("📈 期間分析とリスク評価 (RHI)")
                 
                 period_options = [7, 30, 90]
-                if len(df_processed) < 7:
-                    st.info("期間分析には最低7日分のデータが必要です。記録を続けてみましょう！")
-                else:
+                
+                df_period_for_rhi = df_processed
+                if len(df_processed) >= 7:
                     valid_periods = [p for p in period_options if len(df_processed) >= p]
                     default_index = len(valid_periods) - 1 if valid_periods else 0
                     selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
-
-                    df_period = df_processed.tail(selected_period)
+                    df_period_for_rhi = df_processed.tail(selected_period)
 
                     st.markdown("##### あなたのリスク許容度を設定")
                     col1, col2, col3 = st.columns(3)
@@ -786,7 +806,7 @@ def main():
                     gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
                     tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
 
-                    rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                    rhi_results = calculate_rhi_metrics(df_period_for_rhi, lambda_param, gamma_param, tau_param)
 
                     st.markdown("##### 分析結果")
                     col1a, col2a, col3a, col4a = st.columns(4)
@@ -794,21 +814,22 @@ def main():
                     col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
                     col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
                     col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
+                else:
+                    st.info(f"現在{len(df_processed)}日分のデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
 
                 if not df_processed.empty:
                     analyze_discrepancy(df_processed)
                     st.subheader('調和度 (H) の推移')
                     st.line_chart(df_processed.set_index('date')['H'])
 
-                    # ★★★ ここからが新機能 ★★★
                     st.subheader("🔎 構造分析：あなたの理想と現実")
                     col_chart1, col_chart2 = st.columns(2)
                     
                     with col_chart1:
                         st.markdown("##### 理想 vs 現実 レーダーチャート")
                         
-                        avg_q = df_period[Q_COLS].mean().values
-                        avg_s = df_period[S_COLS].mean().values
+                        avg_q = df_period_for_rhi[Q_COLS].mean().values
+                        avg_s = df_period_for_rhi[S_COLS].mean().values
 
                         fig = go.Figure()
 
@@ -849,7 +870,6 @@ def main():
                                      labels={'gap':'ギャップ (理想 - 現実)', 'domain':'ドメイン'})
                         fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                         st.plotly_chart(fig_bar, use_container_width=True)
-                    # ★★★ ここまでが新機能 ★★★
 
                     st.subheader('全記録データ')
                     df_display = user_data_df.copy()
@@ -860,6 +880,81 @@ def main():
         
         with tab3:
             st.header("🔧 設定とガイド")
+            
+            st.subheader("プロフィール情報（研究協力用）")
+            st.info("これらの情報は、あなたのデータをより大きな科学的発見に繋げるために、任意でご提供いただくものです。入力されなくても、アプリの機能に制限はありません。")
+            
+            with st.form("profile_form"):
+                current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
+                
+                age_group = st.selectbox(
+                    "年代を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['age_group'],
+                    index=DEMOGRAPHIC_OPTIONS['age_group'].index(current_profile.get('age_group', '未選択'))
+                )
+                gender = st.selectbox(
+                    "性別を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['gender'],
+                    index=DEMOGRAPHIC_OPTIONS['gender'].index(current_profile.get('gender', '未選択'))
+                )
+                occupation_category = st.selectbox(
+                    "最も近い職業カテゴリを選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['occupation_category'],
+                    index=DEMOGRAPHIC_OPTIONS['occupation_category'].index(current_profile.get('occupation_category', '未選択'))
+                )
+                income_range = st.selectbox(
+                    "世帯年収の範囲を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['income_range'],
+                    index=DEMOGRAPHIC_OPTIONS['income_range'].index(current_profile.get('income_range', '未選択'))
+                )
+                marital_status = st.selectbox(
+                    "婚姻状況を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['marital_status'],
+                    index=DEMOGRAPHIC_OPTIONS['marital_status'].index(current_profile.get('marital_status', '未選択'))
+                )
+                has_children = st.selectbox(
+                    "お子様の有無を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['has_children'],
+                    index=DEMOGRAPHIC_OPTIONS['has_children'].index(current_profile.get('has_children', '未選択'))
+                )
+                living_situation = st.selectbox(
+                    "現在の居住形態を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['living_situation'],
+                    index=DEMOGRAPHIC_OPTIONS['living_situation'].index(current_profile.get('living_situation', '未選択'))
+                )
+                chronic_illness = st.selectbox(
+                    "慢性的な疾患の有無を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['chronic_illness'],
+                    index=DEMOGRAPHIC_OPTIONS['chronic_illness'].index(current_profile.get('chronic_illness', '未選択'))
+                )
+                country = st.selectbox(
+                    "居住国を選択してください",
+                    options=DEMOGRAPHIC_OPTIONS['country'],
+                    index=DEMOGRAPHIC_OPTIONS['country'].index(current_profile.get('country', '未選択'))
+                )
+                
+                profile_submitted = st.form_submit_button("プロフィールを保存する")
+
+                if profile_submitted:
+                    users_df.loc[users_df['user_id'] == user_id, 'age_group'] = age_group
+                    users_df.loc[users_df['user_id'] == user_id, 'gender'] = gender
+                    users_df.loc[users_df['user_id'] == user_id, 'occupation_category'] = occupation_category
+                    users_df.loc[users_df['user_id'] == user_id, 'income_range'] = income_range
+                    users_df.loc[users_df['user_id'] == user_id, 'marital_status'] = marital_status
+                    users_df.loc[users_df['user_id'] == user_id, 'has_children'] = has_children
+                    users_df.loc[users_df['user_id'] == user_id, 'living_situation'] = living_situation
+                    users_df.loc[users_df['user_id'] == user_id, 'chronic_illness'] = chronic_illness
+                    users_df.loc[users_df['user_id'] == user_id, 'country'] = country
+                    
+                    if write_data('users', users_sheet_id, users_df):
+                        st.success("プロフィール情報を更新しました！ご協力ありがとうございます。")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("プロフィールの保存に失敗しました。")
+
+            st.markdown('---')
+            
             st.subheader("データのエクスポート")
             if not user_data_df.empty:
                 df_export = user_data_df.copy()
@@ -882,7 +977,6 @@ def main():
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
 
                 if delete_submitted:
-                    users_df = read_data('users', users_sheet_id)
                     user_record = users_df[users_df['user_id'] == user_id]
                     if not user_record.empty and EncryptionManager.check_password(password_for_delete, user_record.iloc[0]['password_hash']):
                         users_df_updated = users_df[users_df['user_id'] != user_id]
@@ -929,7 +1023,16 @@ def main():
                         hashed_pw = EncryptionManager.hash_password(new_password)
                         
                         users_df = read_data('users', users_sheet_id)
-                        new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent}])
+                        
+                        new_user_data = {
+                            'user_id': new_user_id,
+                            'password_hash': hashed_pw,
+                            'consent': consent
+                        }
+                        for key in DEMOGRAPHIC_OPTIONS.keys():
+                            new_user_data[key] = '未選択'
+
+                        new_user_df = pd.DataFrame([new_user_data])
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
                         if write_data('users', users_sheet_id, updated_users_df):
                             st.session_state.user_id = new_user_id
