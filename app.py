@@ -1,4 +1,4 @@
-# app.py (v7.0.30 - Quick Log UI Enhancement)
+# app.py (v7.0.31 - Mandatory Wizard Implementation)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -220,44 +220,34 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     if df_copy.empty:
         return df_copy
 
-    # s_domainの値を、mode列に基づいて計算/選択する
     def get_s_domains_based_on_mode(row):
         if row.get('mode') == 'deep':
-            # 'deep'モードの場合は、s_element列からs_domainを計算する
             return calculate_s_domains_from_row(row)
         else:
-            # 'quick'モードまたはmodeが未指定の場合は、既存のs_domain列をそのまま使用する
             return row[S_COLS]
 
-    # applyを使って、各行に適切なs_domain値を設定する
     s_domain_updates = df_copy.apply(get_s_domains_based_on_mode, axis=1)
     df_copy[S_COLS] = s_domain_updates
 
-    # NaN値を0で埋める（計算のため）
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
     
-    # ここから先のS, U, Hの計算ロジックは変更なし
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
     q_vectors = df_copy[Q_COLS].values / 100.0
     
-    # np.nansumを使用して、NaNが含まれていても安全に計算
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
     def calculate_unity(row):
         q_vec = row[Q_COLS].values.astype(float)
         s_vec_raw = row[S_COLS].values.astype(float)
         
-        # q_vecの合計が0の場合は、価値が設定されていないので一致度を0とする
         if np.sum(q_vec) == 0: return 0.0
         q_vec_norm = q_vec / np.sum(q_vec)
         
-        # s_vecの合計が0の場合は、充足が全くないので一致度を0とする
         if np.sum(s_vec_raw) == 0: return 0.0
         s_tilde = s_vec_raw / np.sum(s_vec_raw)
         
-        # Jensen-Shannon Divergenceを計算
         jsd_sqrt = jensenshannon(q_vec_norm, s_tilde)
         jsd = float(jsd_sqrt) ** 2
         return 1.0 - jsd
@@ -654,7 +644,7 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.30 - Quick Log UI Enhancement')
+    st.caption('v7.0.31 - Mandatory Wizard Implementation')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -713,70 +703,31 @@ def main():
         st.sidebar.header('⚙️ 価値観 (q_t) の設定')
         with st.sidebar.expander("▼ これは、何のために設定するの？"):
             st.markdown(EXPANDER_TEXTS['q_t'])
-
-        if 'wizard_mode' not in st.session_state:
-            st.session_state.wizard_mode = False
-        if 'q_wizard_step' not in st.session_state:
-            st.session_state.q_wizard_step = 0
-        if 'q_comparisons' not in st.session_state:
-            st.session_state.q_comparisons = {}
         
-        with st.sidebar.expander("▼ 価値観の配分が難しいと感じる方へ"):
-            st.markdown("合計100点の配分は難しいと感じることがあります。簡単な比較質問に答えるだけで、あなたの価値観のたたき台を提案します。")
-            if st.button("対話で価値観を発見する（21の質問）"):
-                st.session_state.wizard_mode = True
-                st.session_state.q_wizard_step = 1
-                st.session_state.q_comparisons = {}
-                st.rerun()
-        
-        if st.session_state.wizard_mode:
-            pairs = list(itertools.combinations(DOMAINS, 2))
-            if 0 < st.session_state.q_wizard_step <= len(pairs):
-                pair = pairs[st.session_state.q_wizard_step - 1]
-                domain1, domain2 = pair
-                st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
-                st.sidebar.write("あなたの人生がより充実するために、今、より重要なのはどちらですか？")
-                col1, col2 = st.sidebar.columns(2)
-                if col1.button(DOMAIN_NAMES_JP_DICT[domain1], key=f"btn_{domain1}"):
-                    st.session_state.q_comparisons[pair] = domain1
-                    st.session_state.q_wizard_step += 1
-                    st.rerun()
-                if col2.button(DOMAIN_NAMES_JP_DICT[domain2], key=f"btn_{domain2}"):
-                    st.session_state.q_comparisons[pair] = domain2
-                    st.session_state.q_wizard_step += 1
-                    st.rerun()
-            else:
-                if st.session_state.q_comparisons:
-                    st.sidebar.success("診断完了！あなたの価値観の推定値です。")
-                    estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
-                    st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
-                st.session_state.wizard_mode = False
-                st.rerun()
-        else:
-            if not user_data_df.empty:
-                sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-                latest_q_row = sortable_df[Q_COLS].dropna(how='all')
-                if not latest_q_row.empty:
-                    latest_q = latest_q_row.iloc[0].to_dict()
-                    default_q_values = {
-                        key.replace('q_', ''): int(val) 
-                        for key, val in latest_q.items() 
-                        if isinstance(val, (int, float)) and pd.notna(val)
-                    }
-                else:
-                    default_q_values = st.session_state.q_values
+        if not user_data_df.empty:
+            sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+            latest_q_row = sortable_df[Q_COLS].dropna(how='all')
+            if not latest_q_row.empty:
+                latest_q = latest_q_row.iloc[0].to_dict()
+                default_q_values = {
+                    key.replace('q_', ''): int(val) 
+                    for key, val in latest_q.items() 
+                    if isinstance(val, (int, float)) and pd.notna(val)
+                }
             else:
                 default_q_values = st.session_state.q_values
-            
-            for domain in DOMAINS:
-                st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+        else:
+            default_q_values = st.session_state.q_values
+        
+        for domain in DOMAINS:
+            st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
 
-            q_total = sum(st.session_state.q_values.values())
-            st.sidebar.metric(label="現在の合計値", value=q_total)
-            if q_total != 100:
-                st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-            else:
-                st.sidebar.success("合計は100です。入力準備OK！")
+        q_total = sum(st.session_state.q_values.values())
+        st.sidebar.metric(label="現在の合計値", value=q_total)
+        if q_total != 100:
+            st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+        else:
+            st.sidebar.success("合計は100です。入力準備OK！")
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
