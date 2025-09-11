@@ -2,6 +2,7 @@ streamlit
 pandas
 numpy
 scipy
-st-gsheets-connection
+gspread
+google-auth
+google-auth-oauthlib
 bcrypt
-textblob
