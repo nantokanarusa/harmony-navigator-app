@@ -1,4 +1,4 @@
-# app.py (v7.0.35 - Mandatory Wizard Flow Fix & Complete Code)
+# app.py (v7.0.37 - Real-time Dashboard Update & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -412,11 +412,12 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
+            element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
             db_schema_cols = (
                 ['user_id', 'date', 'consent', 'mode'] + 
                 Q_COLS + S_COLS + 
                 ['g_happiness', 'event_log'] +
-                sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
+                element_cols_ordered
             )
         
         for col in db_schema_cols:
@@ -600,7 +601,7 @@ def show_legal_documents():
 def get_safe_index(options, value):
     try:
         return options.index(value)
-    except ValueError:
+    except (ValueError, TypeError):
         return 0
 
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
@@ -677,9 +678,9 @@ def run_wizard_interface(container):
             if st.session_state.q_comparisons:
                 st.success("診断完了！あなたの価値観の推定値が計算されました。")
                 estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
-                st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                 
-                st.session_state.wizard_completed = True
+                # ここでセッションステートに即時反映
+                st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                 
                 st.write("推定されたあなたの価値観:")
                 st.bar_chart({DOMAIN_NAMES_JP_DICT[k]: v for k, v in st.session_state.q_values.items()})
@@ -697,7 +698,6 @@ def run_wizard_interface(container):
 
                     if write_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"], all_data_df_updated):
                         st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
-                        st.session_state.wizard_mode = False
                         st.success("価値観を保存しました。メイン画面に移動します。")
                         time.sleep(1)
                         st.rerun()
@@ -707,7 +707,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.35 - Mandatory Wizard Flow Fix & Complete Code')
+    st.caption('v7.0.36 - State Management Fix & Final Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -723,13 +723,13 @@ def main():
         st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
         st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
     if 'consent' not in st.session_state: st.session_state.consent = False
-    if 'wizard_mode' not in st.session_state: st.session_state.wizard_mode = False
     if 'q_wizard_step' not in st.session_state: st.session_state.q_wizard_step = 0
     if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
 
     auth_status = st.session_state.auth_status
 
     if auth_status == "AWAITING_ID":
+        # (AWAITING_IDのUI - 省略なし)
         st.header("【あなたの船が、完成しました】")
         st.success("ようこそ、航海士へ。")
         st.warning(f"""
@@ -749,27 +749,31 @@ def main():
     elif auth_status == "AWAITING_WIZARD":
         run_wizard_interface(st.container())
 
-    elif auth_status == "LOGGED_IN_UNLOCKED":
+    elif auth_status == "CHECKING_USER_DATA":
         user_id = st.session_state.user_id
-        
         all_data_df = read_data('data', data_sheet_id)
-        
-        if not all_data_df.empty and 'user_id' in all_data_df.columns:
+        if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
-            user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
-            
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
             if not has_q_data:
                 st.session_state.auth_status = "AWAITING_WIZARD"
                 st.session_state.q_wizard_step = 1
                 st.session_state.q_comparisons = {}
-                st.rerun()
+            else:
+                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
         else:
             st.session_state.auth_status = "AWAITING_WIZARD"
             st.session_state.q_wizard_step = 1
             st.session_state.q_comparisons = {}
-            st.rerun()
+        st.rerun()
 
+    elif auth_status == "LOGGED_IN_UNLOCKED":
+        user_id = st.session_state.user_id
+        
+        all_data_df = read_data('data', data_sheet_id)
+        user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+        user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
+            
         st.sidebar.header(f"ようこそ、{user_id} さん！")
         if st.sidebar.button("ログアウト（下船する）"):
             for key in list(st.session_state.keys()):
@@ -781,16 +785,13 @@ def main():
         with st.sidebar.expander("▼ これは、何のために設定するの？"):
             st.markdown(EXPANDER_TEXTS['q_t'])
         
-        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-        latest_q_row = sortable_df[Q_COLS].dropna(how='all')
-        if not latest_q_row.empty:
-            latest_q = latest_q_row.iloc[0].to_dict()
-            default_q_values = {key.replace('q_', ''): int(val) for key, val in latest_q.items() if isinstance(val, (int, float)) and pd.notna(val)}
-        else:
-            default_q_values = st.session_state.q_values
-        
+        # 常にセッションステートを正として、UIを構築
         for domain in DOMAINS:
-            st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+            st.session_state.q_values[domain] = st.sidebar.slider(
+                DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
+                st.session_state.q_values.get(domain, 14), 
+                key=f"q_{domain}"
+            )
 
         q_total = sum(st.session_state.q_values.values())
         st.sidebar.metric(label="現在の合計値", value=q_total)
@@ -802,6 +803,7 @@ def main():
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
         with tab1:
+            # (記録タブのUI - 省略なし)
             st.header(f"今日の航海日誌を記録する")
             st.markdown("##### 記録する日付")
             today = date.today()
@@ -965,7 +967,10 @@ def main():
                     with col_chart1:
                         st.markdown("##### 価値観 vs 経験 レーダーチャート")
                         
-                        avg_q = df_period[Q_COLS].mean().values
+                        # ★★★ 修正点 ★★★
+                        # 過去データ平均ではなく、常に最新のセッションステートのq_valuesを参照する
+                        latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
+                        avg_q = latest_q_values
                         avg_s = df_period[S_COLS].mean().values
                         
                         s_achieved_ratio = avg_s / 100.0 
@@ -1032,14 +1037,11 @@ def main():
             st.subheader("価値観の再発見")
             st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
             if st.button("価値観発見ウィザードを始める"):
-                st.session_state.wizard_mode = True
+                st.session_state.auth_status = "AWAITING_WIZARD"
                 st.session_state.q_wizard_step = 1
                 st.session_state.q_comparisons = {}
                 st.rerun()
-
-            if st.session_state.get('wizard_mode', False):
-                run_wizard_interface(st.container())
-
+            
             st.markdown('---')
             st.subheader("プロフィール情報（研究協力用）")
             with st.form("profile_form"):
@@ -1181,7 +1183,7 @@ def main():
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
                                 st.session_state.user_id = user_id_input
                                 st.session_state.enc_manager = EncryptionManager(password_input)
-                                st.session_state.auth_status = "CHECKING_USER_DATA" # 修正点
+                                st.session_state.auth_status = "CHECKING_USER_DATA"
                                 st.success("乗船に成功しました！データを読み込んでいます...")
                                 time.sleep(1)
                                 st.rerun()
