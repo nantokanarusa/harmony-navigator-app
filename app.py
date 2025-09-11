@@ -1,4 +1,4 @@
-# app.py (v7.0.15 - Full Legal Text & Final Review)
+# app.py (v7.0.16 - Advanced Dashboard Visualization)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -19,10 +19,13 @@ import plotly.express as px
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
-DOMAIN_NAMES_JP = {
+DOMAIN_NAMES_JP_DICT = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
     'autonomy': '4. 自律・成長', 'finance': '5. 経済', 'leisure': '6. 余暇・心理', 'competition': '7. 競争'
 }
+# 順序を保証したリストも用意
+DOMAIN_NAMES_JP_VALUES = [DOMAIN_NAMES_JP_DICT[d] for d in DOMAINS]
+
 SHORT_ELEMENTS = {
     'health': ['睡眠と休息', '身体的な快調さ'], 'relationships': ['親密な関係', '利他性・貢献'],
     'meaning': ['仕事・学業の充実感', '価値との一致'], 'autonomy': ['自己決定感', '自己成長の実感'],
@@ -614,11 +617,11 @@ def main():
                 st.sidebar.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
                 st.sidebar.write("あなたの人生がより充実するために、今、より重要なのはどちらですか？")
                 col1, col2 = st.sidebar.columns(2)
-                if col1.button(DOMAIN_NAMES_JP[domain1], key=f"btn_{domain1}"):
+                if col1.button(DOMAIN_NAMES_JP_DICT[domain1], key=f"btn_{domain1}"):
                     st.session_state.q_comparisons[pair] = domain1
                     st.session_state.q_wizard_step += 1
                     st.rerun()
-                if col2.button(DOMAIN_NAMES_JP[domain2], key=f"btn_{domain2}"):
+                if col2.button(DOMAIN_NAMES_JP_DICT[domain2], key=f"btn_{domain2}"):
                     st.session_state.q_comparisons[pair] = domain2
                     st.session_state.q_wizard_step += 1
                     st.rerun()
@@ -646,7 +649,7 @@ def main():
                 default_q_values = st.session_state.q_values
             
             for domain in DOMAINS:
-                st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
+                st.session_state.q_values[domain] = st.sidebar.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, int(default_q_values.get(domain, 14)), key=f"q_{domain}")
 
             q_total = sum(st.session_state.q_values.values())
             st.sidebar.metric(label="現在の合計値", value=q_total)
@@ -693,7 +696,7 @@ def main():
                     with container:
                         elements_to_show = active_elements.get(domain, [])
                         if elements_to_show:
-                            with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**", expanded=True):
+                            with st.expander(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", expanded=True):
                                 for element in elements_to_show:
                                     col_name = f's_element_{element}'
                                     val = latest_s_elements.get(col_name, 50)
