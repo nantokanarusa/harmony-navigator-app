@@ -1,4 +1,4 @@
-# app.py (v7.0.31 - Mandatory Wizard Implementation)
+# app.py (v7.0.32 - Enhanced Wizard UI/UX)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -212,10 +212,6 @@ def calculate_s_domains_from_row(row: pd.Series) -> pd.Series:
 
 @st.cache_data
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
-    """
-    日次のS, U, H指標をデータフレームに追加する。
-    記録モード('mode'列)に応じて、s_domainの計算方法を切り替える。
-    """
     df_copy = df.copy()
     if df_copy.empty:
         return df_copy
@@ -603,10 +599,6 @@ def get_safe_index(options, value):
         return 0
 
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
-    """
-    ユーザーのデータフレームを最新のスキーマに合わせる。
-    不足している列があれば追加し、変更があればGoogle Sheetsに書き戻す。
-    """
     EXPECTED_COLUMNS = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
     missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
@@ -641,10 +633,78 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
     
     return df_migrated
 
+def run_wizard_interface(container):
+    """価値観発見ウィザードのUIをレンダリングする再利用可能な関数"""
+    pairs = list(itertools.combinations(DOMAINS, 2))
+    
+    with container:
+        st.header("ようこそ！あなたの羅針盤を設定しましょう")
+        st.info("あなたの人生という航海で、何を大切にしたいかを見つけるための、最初のステップです。21の簡単な質問に答えることで、あなたの価値観の「たたき台」を一緒に探しましょう。")
+
+        progress_value = (st.session_state.q_wizard_step - 1) / len(pairs) if st.session_state.q_wizard_step > 0 else 0
+        st.progress(progress_value, text=f"進捗: {st.session_state.q_wizard_step - 1} / {len(pairs)}")
+
+        if 0 < st.session_state.q_wizard_step <= len(pairs):
+            pair = pairs[st.session_state.q_wizard_step - 1]
+            domain1, domain2 = pair
+            st.subheader(f"質問 {st.session_state.q_wizard_step}/{len(pairs)}")
+            st.write("あなたの人生がより充実するために、今、より重要なのはどちらですか？")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button(DOMAIN_NAMES_JP_DICT[domain1], key=f"btn_{domain1}", use_container_width=True):
+                    st.session_state.q_comparisons[pair] = domain1
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
+                with st.expander("▼ このドメインには、どんな「材料」が含まれる？"):
+                    for element in LONG_ELEMENTS[domain1]:
+                        st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
+
+            with col2:
+                if st.button(DOMAIN_NAMES_JP_DICT[domain2], key=f"btn_{domain2}", use_container_width=True):
+                    st.session_state.q_comparisons[pair] = domain2
+                    st.session_state.q_wizard_step += 1
+                    st.rerun()
+                with st.expander("▼ このドメインには、どんな「材料」が含まれる？"):
+                    for element in LONG_ELEMENTS[domain2]:
+                        st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
+        else:
+            if st.session_state.q_comparisons:
+                st.success("診断完了！あなたの価値観の推定値が計算されました。")
+                estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
+                st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
+                
+                # ウィザード完了フラグを立てる
+                st.session_state.wizard_completed = True
+                
+                st.write("推定されたあなたの価値観:")
+                st.bar_chart({DOMAIN_NAMES_JP_DICT[k]: v for k, v in st.session_state.q_values.items()})
+
+                if st.button("この価値観で航海を始める"):
+                    # 最初のq_tデータをダミーレコードとして保存する
+                    user_id = st.session_state.user_id
+                    all_data_df = read_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"])
+                    
+                    new_record = {'user_id': user_id, 'date': date.today()}
+                    new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+                    new_df_row = pd.DataFrame([new_record])
+
+                    all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
+                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+
+                    if write_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"], all_data_df_updated):
+                        st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                        st.session_state.wizard_mode = False
+                        st.success("価値観を保存しました。メイン画面に移動します。")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("価値観の保存に失敗しました。")
+
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.31 - Mandatory Wizard Implementation')
+    st.caption('v7.0.32 - Enhanced Wizard UI/UX')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -677,21 +737,38 @@ def main():
         st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
         
         if st.button("はい、安全に保管しました。旅を始める"):
-            st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+            st.session_state.auth_status = "AWAITING_WIZARD"
+            st.session_state.q_wizard_step = 1
+            st.session_state.q_comparisons = {}
             st.rerun()
+    
+    elif st.session_state.auth_status == "AWAITING_WIZARD":
+        run_wizard_interface(st.container())
 
     elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
         user_id = st.session_state.user_id
         
         all_data_df = read_data('data', data_sheet_id)
         users_df = read_data('users', users_sheet_id)
-        user_info = users_df[users_df['user_id'] == user_id]
-
+        
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
+            
+            # ログイン後、q_tが一度も設定されていない場合、ウィザードを強制
+            has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
+            if not has_q_data:
+                st.session_state.auth_status = "AWAITING_WIZARD"
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
+                st.rerun()
+
         else:
             user_data_df = pd.DataFrame()
+            st.session_state.auth_status = "AWAITING_WIZARD"
+            st.session_state.q_wizard_step = 1
+            st.session_state.q_comparisons = {}
+            st.rerun()
 
         st.sidebar.header(f"ようこそ、{user_id} さん！")
         if st.sidebar.button("ログアウト（下船する）"):
@@ -704,18 +781,11 @@ def main():
         with st.sidebar.expander("▼ これは、何のために設定するの？"):
             st.markdown(EXPANDER_TEXTS['q_t'])
         
-        if not user_data_df.empty:
-            sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-            latest_q_row = sortable_df[Q_COLS].dropna(how='all')
-            if not latest_q_row.empty:
-                latest_q = latest_q_row.iloc[0].to_dict()
-                default_q_values = {
-                    key.replace('q_', ''): int(val) 
-                    for key, val in latest_q.items() 
-                    if isinstance(val, (int, float)) and pd.notna(val)
-                }
-            else:
-                default_q_values = st.session_state.q_values
+        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+        latest_q_row = sortable_df[Q_COLS].dropna(how='all')
+        if not latest_q_row.empty:
+            latest_q = latest_q_row.iloc[0].to_dict()
+            default_q_values = {key.replace('q_', ''): int(val) for key, val in latest_q.items() if isinstance(val, (int, float)) and pd.notna(val)}
         else:
             default_q_values = st.session_state.q_values
         
@@ -732,6 +802,7 @@ def main():
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
         with tab1:
+            # (tab1のコードは変更なし)
             st.header(f"今日の航海日誌を記録する")
             st.markdown("##### 記録する日付")
             today = date.today()
@@ -768,9 +839,9 @@ def main():
                     col1, col2 = st.columns(2)
                     latest_s_elements = pd.Series(dtype=float)
                     if not user_data_df.empty:
-                        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-                        if not sortable_df.empty:
-                            latest_s_elements = sortable_df.iloc[0]
+                        sortable_df_deep = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+                        if not sortable_df_deep.empty:
+                            latest_s_elements = sortable_df_deep.iloc[0]
 
                     for i, domain in enumerate(DOMAINS):
                         container = col1 if i < 4 else col2
@@ -841,6 +912,7 @@ def main():
                              st.error("データの保存に失敗しました。後でもう一度お試しください。")
 
         with tab2:
+            # (tab2のコードは変更なし)
             st.header('📊 あなたの航海チャート')
             with st.expander("▼ このチャートの見方", expanded=True):
                 st.markdown(EXPANDER_TEXTS['dashboard'])
@@ -956,13 +1028,30 @@ def main():
         with tab3:
             st.header("🔧 設定とガイド")
             
-            st.subheader("プロフィール情報（研究協力用）")
-            st.info("これらの情報は、あなたのデータをより大きな科学的発見に繋げるために、任意でご提供いただくものです。入力されなくても、アプリの機能に制限はありません。")
+            st.subheader("価値観の再発見")
+            st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
+            if 'wizard_mode' not in st.session_state:
+                st.session_state.wizard_mode = False
             
+            if st.button("価値観発見ウィザードを始める"):
+                st.session_state.wizard_mode = True
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
+                st.rerun()
+
+            if st.session_state.get('wizard_mode', False):
+                run_wizard_interface(st.container())
+
+            st.markdown('---')
+            st.subheader("プロフィール情報（研究協力用）")
+            # (プロフィールフォームのコードは変更なし)
             with st.form("profile_form"):
+                user_info = read_data('users', users_sheet_id)
+                user_info = user_info[user_info['user_id'] == user_id]
                 current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
                 
                 age_group = st.selectbox("年代を選択してください", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group', '未選択')))
+                # ... (他のselectboxも同様)
                 gender = st.selectbox("性別を選択してください", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender', '未選択')))
                 occupation_category = st.selectbox("最も近い職業カテゴリを選択してください", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category', '未選択')))
                 income_range = st.selectbox("世帯年収の範囲を選択してください", options=DEMOGRAPHIC_OPTIONS['income_range'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range', '未選択')))
@@ -975,17 +1064,18 @@ def main():
                 profile_submitted = st.form_submit_button("プロフィールを保存する")
 
                 if profile_submitted:
-                    users_df.loc[users_df['user_id'] == user_id, 'age_group'] = age_group
-                    users_df.loc[users_df['user_id'] == user_id, 'gender'] = gender
-                    users_df.loc[users_df['user_id'] == user_id, 'occupation_category'] = occupation_category
-                    users_df.loc[users_df['user_id'] == user_id, 'income_range'] = income_range
-                    users_df.loc[users_df['user_id'] == user_id, 'marital_status'] = marital_status
-                    users_df.loc[users_df['user_id'] == user_id, 'has_children'] = has_children
-                    users_df.loc[users_df['user_id'] == user_id, 'living_situation'] = living_situation
-                    users_df.loc[users_df['user_id'] == user_id, 'chronic_illness'] = chronic_illness
-                    users_df.loc[users_df['user_id'] == user_id, 'country'] = country
+                    users_df_update = read_data('users', users_sheet_id)
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'age_group'] = age_group
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'gender'] = gender
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'occupation_category'] = occupation_category
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'income_range'] = income_range
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'marital_status'] = marital_status
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'has_children'] = has_children
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'living_situation'] = living_situation
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'chronic_illness'] = chronic_illness
+                    users_df_update.loc[users_df_update['user_id'] == user_id, 'country'] = country
                     
-                    if write_data('users', users_sheet_id, users_df):
+                    if write_data('users', users_sheet_id, users_df_update):
                         st.success("プロフィール情報を更新しました！ご協力ありがとうございます。")
                         time.sleep(1)
                         st.rerun()
@@ -1016,11 +1106,13 @@ def main():
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
 
                 if delete_submitted:
-                    user_record = users_df[users_df['user_id'] == user_id]
+                    users_df_to_delete = read_data('users', users_sheet_id)
+                    user_record = users_df_to_delete[users_df_to_delete['user_id'] == user_id]
                     if not user_record.empty and EncryptionManager.check_password(password_for_delete, user_record.iloc[0]['password_hash']):
-                        users_df_updated = users_df[users_df['user_id'] != user_id]
+                        users_df_updated = users_df_to_delete[users_df_to_delete['user_id'] != user_id]
                         if write_data('users', users_sheet_id, users_df_updated):
-                            all_data_df_updated = all_data_df[all_data_df['user_id'] != user_id]
+                            all_data_df_to_delete = read_data('data', data_sheet_id)
+                            all_data_df_updated = all_data_df_to_delete[all_data_df_to_delete['user_id'] != user_id]
                             if write_data('data', data_sheet_id, all_data_df_updated):
                                 for key in list(st.session_state.keys()):
                                     del st.session_state[key]
@@ -1107,4 +1199,4 @@ def main():
                         st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
-    main()
+    main()```
