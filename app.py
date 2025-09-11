@@ -1,4 +1,4 @@
-# app.py (v7.0.37 - Real-time Dashboard Update & Complete Code)
+# app.py (v7.0.38 - Critical State Management Fix & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -679,7 +679,6 @@ def run_wizard_interface(container):
                 st.success("診断完了！あなたの価値観の推定値が計算されました。")
                 estimated_weights = calculate_ahp_weights(st.session_state.q_comparisons, DOMAINS)
                 
-                # ここでセッションステートに即時反映
                 st.session_state.q_values = {domain: weight for domain, weight in zip(DOMAINS, estimated_weights)}
                 
                 st.write("推定されたあなたの価値観:")
@@ -697,7 +696,7 @@ def run_wizard_interface(container):
                     all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
 
                     if write_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"], all_data_df_updated):
-                        st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                        st.session_state.auth_status = "INITIALIZING_SESSION"
                         st.success("価値観を保存しました。メイン画面に移動します。")
                         time.sleep(1)
                         st.rerun()
@@ -707,7 +706,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.37 - Real-time Dashboard Update & Complete Code')
+    st.caption('v7.0.38 - Critical State Management Fix & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -722,14 +721,62 @@ def main():
     if 'q_values' not in st.session_state:
         st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
         st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
-    if 'consent' not in st.session_state: st.session_state.consent = False
     if 'q_wizard_step' not in st.session_state: st.session_state.q_wizard_step = 0
     if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
 
     auth_status = st.session_state.auth_status
 
-    if auth_status == "AWAITING_ID":
-        # (AWAITING_IDのUI - 省略なし)
+    if auth_status == "NOT_LOGGED_IN":
+        show_welcome_and_guide()
+        st.subheader("あなたの旅を、ここから始めましょう")
+        show_legal_documents()
+        door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
+        with door1:
+            with st.form("register_form"):
+                agreement = st.checkbox("上記の利用規約とプライバシーポリシーに同意します。")
+                new_password = st.text_input("パスワード（8文字以上）", type="password")
+                new_password_confirm = st.text_input("パスワード（確認用）", type="password")
+                consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
+                submitted = st.form_submit_button("同意して登録し、秘密の合い言葉を発行する")
+                if submitted:
+                    if not agreement: st.error("旅を始めるには、利用規約とプライバシーポリシーに同意していただく必要があります。")
+                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
+                    else:
+                        new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+                        hashed_pw = EncryptionManager.hash_password(new_password)
+                        users_df = read_data('users', users_sheet_id)
+                        new_user_data = {'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent}
+                        for key in DEMOGRAPHIC_OPTIONS.keys(): new_user_data[key] = '未選択'
+                        new_user_df = pd.DataFrame([new_user_data])
+                        updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
+                        if write_data('users', users_sheet_id, updated_users_df):
+                            st.session_state.user_id = new_user_id
+                            st.session_state.enc_manager = EncryptionManager(new_password)
+                            st.session_state.auth_status = "AWAITING_ID"
+                            st.rerun()
+        with door2:
+            with st.form("login_form"):
+                user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
+                password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
+                submitted = st.form_submit_button("乗船する")
+                if submitted:
+                    if user_id_input and password_input:
+                        users_df = read_data('users', users_sheet_id)
+                        if not users_df.empty:
+                            user_record = users_df[users_df['user_id'] == user_id_input]
+                            if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
+                                st.session_state.user_id = user_id_input
+                                st.session_state.enc_manager = EncryptionManager(password_input)
+                                st.session_state.auth_status = "CHECKING_USER_DATA"
+                                st.success("乗船に成功しました！データを読み込んでいます...")
+                                time.sleep(1)
+                                st.rerun()
+                            else: st.error("合い言葉またはパスワードが間違っています。")
+                        else: st.error("その合い言葉を持つ船は見つかりませんでした。")
+                    else: st.warning("合い言葉とパスワードの両方を入力してください。")
+
+    elif auth_status == "AWAITING_ID":
         st.header("【あなたの船が、完成しました】")
         st.success("ようこそ、航海士へ。")
         st.warning(f"""
@@ -739,7 +786,6 @@ def main():
             """)
         st.code(st.session_state.user_id)
         st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
-        
         if st.button("はい、安全に保管しました。旅を始める"):
             st.session_state.auth_status = "AWAITING_WIZARD"
             st.session_state.q_wizard_step = 1
@@ -760,11 +806,25 @@ def main():
                 st.session_state.q_wizard_step = 1
                 st.session_state.q_comparisons = {}
             else:
-                st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
+                st.session_state.auth_status = "INITIALIZING_SESSION"
         else:
             st.session_state.auth_status = "AWAITING_WIZARD"
             st.session_state.q_wizard_step = 1
             st.session_state.q_comparisons = {}
+        st.rerun()
+
+    elif auth_status == "INITIALIZING_SESSION":
+        user_id = st.session_state.user_id
+        all_data_df = read_data('data', data_sheet_id)
+        user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+        
+        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+        latest_q_row = sortable_df[Q_COLS].dropna(how='all')
+        if not latest_q_row.empty:
+            latest_q = latest_q_row.iloc[0].to_dict()
+            st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q.items() if isinstance(val, (int, float)) and pd.notna(val)}
+        
+        st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
         st.rerun()
 
     elif auth_status == "LOGGED_IN_UNLOCKED":
@@ -785,7 +845,6 @@ def main():
         with st.sidebar.expander("▼ これは、何のために設定するの？"):
             st.markdown(EXPANDER_TEXTS['q_t'])
         
-        # 常にセッションステートを正として、UIを構築
         for domain in DOMAINS:
             st.session_state.q_values[domain] = st.sidebar.slider(
                 DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
@@ -803,7 +862,6 @@ def main():
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
         with tab1:
-            # (記録タブのUI - 省略なし)
             st.header(f"今日の航海日誌を記録する")
             st.markdown("##### 記録する日付")
             today = date.today()
@@ -967,8 +1025,6 @@ def main():
                     with col_chart1:
                         st.markdown("##### 価値観 vs 経験 レーダーチャート")
                         
-                        # ★★★ 修正点 ★★★
-                        # 過去データ平均ではなく、常に最新のセッションステートのq_valuesを参照する
                         latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
                         avg_q = latest_q_values
                         avg_s = df_period[S_COLS].mean().values
@@ -1041,7 +1097,7 @@ def main():
                 st.session_state.q_wizard_step = 1
                 st.session_state.q_comparisons = {}
                 st.rerun()
-            
+
             st.markdown('---')
             st.subheader("プロフィール情報（研究協力用）")
             with st.form("profile_form"):
@@ -1132,8 +1188,6 @@ def main():
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
-            st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
-            
             with st.form("register_form"):
                 agreement = st.checkbox("上記の利用規約とプライバシーポリシーに同意します。")
                 new_password = st.text_input("パスワード（8文字以上）", type="password")
@@ -1165,11 +1219,9 @@ def main():
                             st.session_state.user_id = new_user_id
                             st.session_state.enc_manager = EncryptionManager(new_password)
                             st.session_state.auth_status = "AWAITING_ID"
-                            st.session_state.consent = consent
                             st.rerun()
 
         with door2:
-            st.info("すでに「秘密の合い言葉」と「パスワード」をお持ちの方は、こちらから旅を続けてください。")
             with st.form("login_form"):
                 user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
                 password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
