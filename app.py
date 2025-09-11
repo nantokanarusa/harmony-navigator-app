@@ -410,18 +410,25 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
-        all_possible_cols = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
-        for col in all_possible_cols:
+        # データベースのスキーマに存在するすべての列を定義
+        db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
+        if sheet_name == 'data':
+            db_schema_cols = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+        
+        # データフレームに不足している列を追加
+        for col in db_schema_cols:
             if col not in df_copy.columns:
-                df_copy[col] = ''
+                df_copy[col] = '' # または pd.NA や np.nan
+
+        # スキーマの順序に列を並び替え
+        df_to_write = df_copy[db_schema_cols]
         
-        # Ensure correct column order
-        df_copy = df_copy[all_possible_cols]
-        
-        df_copy = df_copy.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
+        # Google Sheetsに書き込む前に、NaNやNaTを空文字に変換
+        df_to_write = df_to_write.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
         
         worksheet.clear()
-        worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist(), value_input_option='USER_ENTERED')
+        worksheet.update([df_to_write.columns.values.tolist()] + df_to_write.values.tolist(), value_input_option='USER_ENTERED')
+        # キャッシュをクリアして、次回の読み込みで最新のデータを取得
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -597,6 +604,54 @@ def get_safe_index(options, value):
     except ValueError:
         return 0
 
+def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
+    """
+    ユーザーのデータフレームを最新のスキーマに合わせる。
+    不足している列があれば追加し、変更があればGoogle Sheetsに書き戻す。
+    """
+    EXPECTED_COLUMNS = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+    
+    # DataFrameに存在する列のみを対象にする
+    existing_expected_columns = [col for col in EXPECTED_COLUMNS if col in df.columns]
+    
+    missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
+
+    if not missing_cols:
+        # 順番を揃えて返す
+        final_order = existing_expected_columns + [c for c in df.columns if c not in EXPECTED_COLUMNS]
+        return df[final_order]
+
+    st.info("古いデータ形式を検出しました。最新の形式に自動的に更新します...")
+    
+    df_migrated = df.copy()
+    for col in missing_cols:
+        df_migrated[col] = pd.NA
+
+    # 確実に存在する列で順序を整える
+    final_cols_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns]
+    df_migrated = df_migrated[final_cols_order]
+
+    # このユーザーのデータのみを更新して、全体のデータを書き戻す
+    try:
+        all_data_df = read_data('data', sheet_id)
+        if not all_data_df.empty:
+            # 他のユーザーのデータは保持
+            other_users_data = all_data_df[all_data_df['user_id'] != user_id]
+            # このユーザーの全データを更新版に差し替え
+            all_data_df_updated = pd.concat([other_users_data, df_migrated], ignore_index=True)
+
+            if write_data('data', sheet_id, all_data_df_updated):
+                st.success("データ形式の更新が完了し、永続的に保存しました。")
+                # 更新後のデータを返す
+                return df_migrated
+            else:
+                st.error("スキーマ更新の保存に失敗しました。一時的なデータで続行します。")
+                return df_migrated
+    except Exception as e:
+        st.warning(f"スキーマ更新の保存中にエラーが発生しました: {e}")
+    
+    return df_migrated
+
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
@@ -645,6 +700,7 @@ def main():
 
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+            # ここでスキーマのマイグレーションを実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
         else:
             user_data_df = pd.DataFrame()
@@ -817,7 +873,7 @@ def main():
                         new_df_row = pd.DataFrame([new_record])
                         
                         if not all_data_df.empty:
-                            condition = (all_data_df['user_id'] == user_id) & (all_data_df['date'] == target_date)
+                            condition = (all_data_df['user_id'] == user_id) & (all_data_df['date'] == pd.to_datetime(target_date).date())
                             all_data_df = all_data_df[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
@@ -1098,4 +1154,4 @@ def main():
                         st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
-    main()
+    main()```
