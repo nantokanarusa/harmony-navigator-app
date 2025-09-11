@@ -1,4 +1,4 @@
-# app.py (v7.0.2 - The Ultimate UX Polish / The Absolute Final Code)
+# app.py (v7.0.2 - The Synthesis Reborn / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,9 +15,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- A. 定数と基本設定 ---
+# (全ての定数を、省略せず、完全に記述)
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-
-# ドメインとエレメントの定義
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -289,7 +288,7 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-# --- D. データ永続化層 (Direct gspread) ---
+# --- D. データ永続化層 (Direct gspread - The Phoenix Method) ---
 @st.cache_resource(ttl=3600)
 def get_gspread_client():
     try:
@@ -304,6 +303,7 @@ def get_gspread_client():
         st.exception(e)
         return None
 
+# ★★★★★ The Unchained Phoenix Correction ★★★★★
 @st.cache_data(ttl=10)
 def read_data(sheet_name: str, spreadsheet_id: str):
     gc = get_gspread_client()
@@ -620,13 +620,27 @@ def main():
                                     col_name = f's_element_{element}'
                                     default_val = int(latest_s_elements.get(col_name, 50))
                                     help_text = ELEMENT_DEFINITIONS.get(element, "")
-                                    score = st.slider(element, 0, 100, default_val, key=col_name, help=help_text)
+                                    
+                                    st.markdown(f"**{element}**")
+                                    score = st.slider(
+                                        label=f"slider_{col_name}",
+                                        min_value=0, max_value=100, value=default_val, 
+                                        key=col_name, 
+                                        label_visibility="collapsed",
+                                        help=help_text
+                                    )
+                                    st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                                     s_element_values[col_name] = int(score)
                 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"):
                     st.markdown(EXPANDER_TEXTS['g_t'])
-                g_happiness = st.slider('', 0, 100, 50, label_visibility="collapsed", help=SLIDER_HELP_TEXT)
+                g_happiness = st.slider(
+                    label="slider_g_happiness",
+                    min_value=0, max_value=100, value=50, 
+                    label_visibility="collapsed"
+                )
+                st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"):
