@@ -1,4 +1,4 @@
-# app.py (v7.0.40 - Timestamp & Robust q_t Loading Fix & Complete Code)
+# app.py (v7.0.45 - Refactored for Readability & Maintainability)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -387,10 +387,10 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
             df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
             
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
-        all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
+        all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness', 'record_timestamp'] + demographic_cols
         
         for col in [c for c in all_cols_to_process if c in df.columns]:
-            if col not in demographic_cols:
+            if col not in demographic_cols and col not in ['record_timestamp']:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df
@@ -414,7 +414,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
         if 'record_timestamp' in df_copy.columns:
-            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp']).dt.tz_localize(None).isoformat()
+            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp']).dt.tz_localize(None).dt.isoformat()
         
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
@@ -713,11 +713,9 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
-# (ここから下のmain関数と、その中のUI描画コードは、
-# 前回のv7.0.38の回答と全く同じです。省略せずに全て記述します。)
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.40 - Timestamp & Robust q_t Loading Fix & Complete Code')
+    st.caption('v7.0.45 - Refactored for Readability & Maintainability')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -756,9 +754,17 @@ def main():
                     else:
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
+                        
                         users_df = read_data('users', users_sheet_id)
-                        new_user_data = {'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent}
-                        for key in DEMOGRAPHIC_OPTIONS.keys(): new_user_data[key] = '未選択'
+                        
+                        new_user_data = {
+                            'user_id': new_user_id,
+                            'password_hash': hashed_pw,
+                            'consent': consent
+                        }
+                        for key in DEMOGRAPHIC_OPTIONS.keys():
+                            new_user_data[key] = '未選択'
+
                         new_user_df = pd.DataFrame([new_user_data])
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
                         if write_data('users', users_sheet_id, updated_users_df):
@@ -784,9 +790,12 @@ def main():
                                 st.success("乗船に成功しました！データを読み込んでいます...")
                                 time.sleep(1)
                                 st.rerun()
-                            else: st.error("合い言葉またはパスワードが間違っています。")
-                        else: st.error("その合い言葉を持つ船は見つかりませんでした。")
-                    else: st.warning("合い言葉とパスワードの両方を入力してください。")
+                            else:
+                                st.error("合い言葉またはパスワードが間違っています。")
+                        else:
+                            st.error("その合い言葉を持つ船は見つかりませんでした。")
+                    else:
+                        st.warning("合い言葉とパスワードの両方を入力してください。")
 
     elif auth_status == "AWAITING_ID":
         st.header("【あなたの船が、完成しました】")
@@ -812,6 +821,7 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+            user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
             if not has_q_data:
                 st.session_state.auth_status = "AWAITING_WIZARD"
@@ -851,7 +861,6 @@ def main():
         
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
-        user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
             
         st.sidebar.header(f"ようこそ、{user_id} さん！")
         if st.sidebar.button("ログアウト（下船する）"):
@@ -901,6 +910,8 @@ def main():
             with st.form(key='daily_input_form'):
                 s_element_values = {}
                 s_domain_values = {}
+                
+                caption_text = "0:全く当てはまらない | 25:あまり.. | 50:どちらとも.. | 75:やや.. | 100:完全に当てはまる"
 
                 if 'クイック' in input_mode:
                     mode_string = 'quick'
@@ -911,7 +922,7 @@ def main():
                             for element in LONG_ELEMENTS[domain]:
                                 st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
                         s_domain_values['s_' + domain] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=50, key=f"s_{domain}", label_visibility="collapsed")
-                        st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
+                        st.caption(caption_text)
 
                 else:
                     mode_string = 'deep'
@@ -934,13 +945,13 @@ def main():
                                     st.markdown(f"**{element}**")
                                     st.caption(ELEMENT_DEFINITIONS.get(element, ""))
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
-                                    st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
+                                    st.caption(caption_text)
                                     s_element_values[col_name] = int(score)
 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
-                st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
+                st.caption(caption_text)
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
