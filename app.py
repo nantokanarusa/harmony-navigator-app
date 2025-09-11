@@ -135,17 +135,17 @@ EXPANDER_TEXTS = {
         このセクションは、期間中のあなたの平均的な心の状態を、**構造的**に分析します。
         
         - **理想 vs 現実 レーダーチャート**:
-            - **これは何？**: あなたの**「理想の幸福の形（青い線）」**と**「現実の幸福の形（緑のエリア）」**を重ね合わせたものです。
+            - **これは何？**: あなたの**「理想の幸福の形（青い線）」**と、その理想に対して**「現実がどれだけ達成できたか（緑のエリア）」**を重ね合わせたものです。
             - **読み方**:
-                - **青い線 (理想)**: あなたが「何を大切にしたいか」という価値観($q_t$)の形です。尖っている方向ほど、あなたが強く価値を置いている領域です。
-                - **緑のエリア (現実)**: あなたが「実際に何に満たされているか」という経験($s_t$)の形です。
-                - **形のズレ**: この二つの形の**不一致**こそが、あなたの人生における構造的な**『ズレ』**です。「理想では人間関係を重視しているのに、現実は仕事ばかり…」といった状況が一目でわかります。
+                - **青い線 (理想の目標値)**: あなたが「何を大切にしたいか」という価値観($q_t$)の形です。尖っている方向ほど、あなたが強く価値を置いている領域であり、そこがあなたの**満点**となります。
+                - **緑のエリア (現実の達成度)**: その目標に対して、**「実際に何パーセント達成できたか」**という経験($s_t$の割合)の形です。
+                - **形のズレ**: この二つの形の**不一致**こそが、あなたの人生における構造的な**『ズレ』**です。「理想では人間関係を重視しているのに、達成度が低い…」といった状況が一目でわかります。
 
         - **価値-充足 ギャップ分析 (棒グラフ)**:
-            - **これは何？**: 各領域で、「理想」から「現実」を差し引いた**『ズレ』の量**を可視化したものです。
+            - **これは何？**: 各領域で、「理想の目標値」から「現実の達成度」を差し引いた**『未達成の量』**を可視化したものです。
             - **読み方**:
                 - **プラスの棒 (赤色系)**: **「理想 > 現実」**。あなたが「大切にしたいと思っているのに、満たされていない」領域です。ここが、あなたの**最大の課題であり、成長のチャンス**が眠る場所です。
-                - **マイナスの棒 (青色系)**: **「現実 > 理想」**。あなたが「あまり重視していなかったのに、予想外に満たされている」領域です。これは、あなたの**隠れた強みや、まだ自覚していない喜びの源泉**かもしれません。
+                - **マイナスの棒 (青色系)**: **「現実 > 理想」**。これは通常、達成率モデルでは発生しませんが、もし表示された場合は、何らかのデータ異常を示唆します。
 
         ---
 
@@ -855,24 +855,19 @@ def main():
                     with col_chart1:
                         st.markdown("##### 理想 vs 現実 レーダーチャート")
                         
-                        # ★★★ 修正箇所 ★★★
                         avg_q = df_period[Q_COLS].mean().values
                         avg_s = df_period[S_COLS].mean().values
                         
-                        # 「達成率」を計算
-                        # s_achieved = q * (s / 100)
                         s_achieved = avg_q * (avg_s / 100.0)
 
                         fig = go.Figure()
 
-                        # 緑のエリア（現実の達成度）
                         fig.add_trace(go.Scatterpolar(
                               r=s_achieved,
                               theta=DOMAIN_NAMES_JP_VALUES,
                               fill='toself',
                               name='現実 (達成度)'
                         ))
-                        # 青い線（理想の目標値）
                         fig.add_trace(go.Scatterpolar(
                               r=avg_q,
                               theta=DOMAIN_NAMES_JP_VALUES,
@@ -880,11 +875,12 @@ def main():
                               name='理想 (価値観)'
                         ))
 
+                        dynamic_range_max = max(40, int(avg_q.max()) + 10)
                         fig.update_layout(
                           polar=dict(
                             radialaxis=dict(
                               visible=True,
-                              range=[0, 100]
+                              range=[0, dynamic_range_max]
                             )),
                           showlegend=True,
                           legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01)
@@ -893,9 +889,8 @@ def main():
 
                     with col_chart2:
                         st.markdown("##### 価値-充足 ギャップ分析")
+                        st.caption("算出方法: ギャップ = 理想 (平均q値) - 達成度 (理想 * (平均s値 / 100))")
                         
-                        # ★★★ 修正箇所 ★★★
-                        # ギャップを「理想 - 現実の達成度」で計算
                         gap_data = pd.DataFrame({
                             'domain': DOMAIN_NAMES_JP_VALUES,
                             'gap': avg_q - s_achieved
@@ -926,58 +921,21 @@ def main():
             with st.form("profile_form"):
                 current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
                 
-                # ★★★ 修正箇所 ★★★
                 def get_safe_index(options, value):
                     try:
                         return options.index(value)
                     except ValueError:
-                        return 0 # 見つからない場合は「未選択」
+                        return 0
 
-                age_group = st.selectbox(
-                    "年代を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['age_group'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group', '未選択'))
-                )
-                gender = st.selectbox(
-                    "性別を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['gender'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender', '未選択'))
-                )
-                occupation_category = st.selectbox(
-                    "最も近い職業カテゴリを選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['occupation_category'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category', '未選択'))
-                )
-                income_range = st.selectbox(
-                    "世帯年収の範囲を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['income_range'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range', '未選択'))
-                )
-                marital_status = st.selectbox(
-                    "婚姻状況を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['marital_status'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status', '未選択'))
-                )
-                has_children = st.selectbox(
-                    "お子様の有無を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['has_children'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['has_children'], current_profile.get('has_children', '未選択'))
-                )
-                living_situation = st.selectbox(
-                    "現在の居住形態を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['living_situation'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['living_situation'], current_profile.get('living_situation', '未選択'))
-                )
-                chronic_illness = st.selectbox(
-                    "慢性的な疾患の有無を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['chronic_illness'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['chronic_illness'], current_profile.get('chronic_illness', '未選択'))
-                )
-                country = st.selectbox(
-                    "居住国を選択してください",
-                    options=DEMOGRAPHIC_OPTIONS['country'],
-                    index=get_safe_index(DEMOGRAPHIC_OPTIONS['country'], current_profile.get('country', '未選択'))
-                )
+                age_group = st.selectbox("年代を選択してください", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group', '未選択')))
+                gender = st.selectbox("性別を選択してください", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender', '未選択')))
+                occupation_category = st.selectbox("最も近い職業カテゴリを選択してください", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category', '未選択')))
+                income_range = st.selectbox("世帯年収の範囲を選択してください", options=DEMOGRAPHIC_OPTIONS['income_range'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range', '未選択')))
+                marital_status = st.selectbox("婚姻状況を選択してください", options=DEMOGRAPHIC_OPTIONS['marital_status'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status', '未選択')))
+                has_children = st.selectbox("お子様の有無を選択してください", options=DEMOGRAPHIC_OPTIONS['has_children'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['has_children'], current_profile.get('has_children', '未選択')))
+                living_situation = st.selectbox("現在の居住形態を選択してください", options=DEMOGRAPHIC_OPTIONS['living_situation'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['living_situation'], current_profile.get('living_situation', '未選択')))
+                chronic_illness = st.selectbox("慢性的な疾患の有無を選択してください", options=DEMOGRAPHIC_OPTIONS['chronic_illness'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['chronic_illness'], current_profile.get('chronic_illness', '未選択')))
+                country = st.selectbox("居住国を選択してください", options=DEMOGRAPHIC_OPTIONS['country'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['country'], current_profile.get('country', '未選択')))
                 
                 profile_submitted = st.form_submit_button("プロフィールを保存する")
 
