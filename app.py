@@ -1,4 +1,4 @@
-# app.py (v7.0.27 - Absolutely Final & No Omissions)
+# app.py (v7.0.28 - SyntaxError Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -655,7 +655,7 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.27 - Absolutely Final & No Omissions')
+    st.caption('v7.0.28 - SyntaxError Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
