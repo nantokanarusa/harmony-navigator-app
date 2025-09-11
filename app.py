@@ -1,4 +1,4 @@
-# app.py (v7.0.21 - Achievement Rate Visualization)
+# app.py (v7.0.22 - Final Dashboard Logic & UX)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -863,14 +863,14 @@ def main():
                         fig = go.Figure()
 
                         fig.add_trace(go.Scatterpolar(
-                              r=s_achieved,
-                              theta=DOMAIN_NAMES_JP_VALUES,
+                              r=np.append(s_achieved, s_achieved[0]),
+                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
                               fill='toself',
                               name='現実 (達成度)'
                         ))
                         fig.add_trace(go.Scatterpolar(
-                              r=avg_q,
-                              theta=DOMAIN_NAMES_JP_VALUES,
+                              r=np.append(avg_q, avg_q[0]),
+                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
                               fill='none',
                               name='理想 (価値観)'
                         ))
@@ -889,19 +889,22 @@ def main():
 
                     with col_chart2:
                         st.markdown("##### 価値-充足 ギャップ分析")
-                        st.caption("算出方法: ギャップ = 理想 (平均q値) - 達成度 (理想 * (平均s値 / 100))")
+                        st.caption("算出方法: ギャップ = 理想の構成比 (%) - 現実の構成比 (%)")
                         
+                        q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
+                        s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
+
                         gap_data = pd.DataFrame({
                             'domain': DOMAIN_NAMES_JP_VALUES,
-                            'gap': avg_q - s_achieved
+                            'gap': q_norm - s_norm
                         }).sort_values('gap', ascending=False)
                         
                         fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h',
                                      color='gap',
                                      color_continuous_scale='RdBu',
                                      color_continuous_midpoint=0,
-                                     labels={'gap':'ギャップ (理想 - 達成度)', 'domain':'ドメイン'},
-                                     title="+: 課題, -: 隠れた強み")
+                                     labels={'gap':'ギャップ (%ポイント)', 'domain':'ドメイン'},
+                                     title="+: 理想 > 現実 (課題), -: 現実 > 理想 (強み)")
                         fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                         st.plotly_chart(fig_bar, use_container_width=True)
 
