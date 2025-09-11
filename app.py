@@ -1,4 +1,4 @@
-# app.py (v7.0.5 - UX & New User Flow Polished)
+# app.py (v7.0.6 - Final Form Logic Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -184,7 +184,7 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
             df_copy[col] = df_copy[col].fillna(0)
     
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
-    q_vectors = df_copy[Q_COLS].values
+    q_vectors = df_copy[Q_COLS].values / 100.0
     
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
@@ -237,11 +237,11 @@ def calculate_ahp_weights(comparisons: dict, items: list) -> np.ndarray:
     return int_weights
 
 def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
-    if df_processed.empty or 'H' not in df_processed.columns or 'g_happiness' not in df_processed.columns:
+    if df_processed.empty or 'H' not in df_processed.columns or 'g_happiness' not in df_processed.columns or df_processed.dropna(subset=['H', 'g_happiness']).empty:
         return
-    latest_record = df_processed.iloc[-1]
-    latest_h = float(latest_record['H']) * 100.0 if pd.notna(latest_record['H']) else 0
-    latest_g = float(latest_record.get('g_happiness', 0)) if pd.notna(latest_record.get('g_happiness', 0)) else 0
+    latest_record = df_processed.dropna(subset=['H', 'g_happiness']).iloc[-1]
+    latest_h = float(latest_record['H']) * 100.0
+    latest_g = float(latest_record['g_happiness'])
     gap = latest_g - latest_h
 
     st.subheader("💡 インサイト・エンジン")
@@ -249,21 +249,29 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
         if gap > threshold:
             st.info(f"""
                 **【幸福なサプライズ！🎉】**
+
                 あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
+                
                 これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
+                
                 **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
                 """)
         elif gap < -threshold:
             st.warning(f"""
                 **【隠れた不満？🤔】**
+
                 あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
+
                 価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
+
                 **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
                 """)
         else:
             st.success(f"""
                 **【順調な航海です！✨】**
+
                 あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
+                
                 あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
                 """)
 
@@ -329,7 +337,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
-        df_copy = df_copy.astype(str).replace({'nan': '', 'NaT': ''})
+        df_copy = df_copy.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
         
         worksheet.clear()
         worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist(), value_input_option='USER_ENTERED')
@@ -393,10 +401,11 @@ def show_welcome_and_guide():
     この仕組みにより、**私たち研究者は、あなたのプライベートな物語に一切触れることなく**、科学の発展に必要なデータだけを得ることができます。
     ここの「同意」チェックボックスは、私たちが、あなたの**「日々の数値データ（幸福度のスコアなど）」**を、将来あなたが送信してくれるかもしれない**「匿名の統計情報」**と結びつけて、分析することへの許可をいただくためのものです。
     """)
+
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.5 - UX & New User Flow Polished')
+    st.caption('v7.0.6 - Final Form Logic Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -429,32 +438,8 @@ def main():
         st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
         
         if st.button("はい、安全に保管しました。旅を始める"):
-            # 修正点：二重パスワード入力をなくすため、直接UNLOCKEDへ
             st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
             st.rerun()
-
-    elif st.session_state.auth_status == "LOGGED_IN_LOCKED":
-        # このブロックは、古いセッションからの移行などのために残すが、
-        # 通常のログインフローでは使われなくなる
-        st.header("🔒 心の金庫を開ける")
-        st.info(f"ようこそ、`{st.session_state.user_id}` さん。")
-        st.warning("航海日誌を読み書きするために、あなたのパスワードを入力して、このセッションのロックを解除してください。")
-        
-        with st.form("decryption_form"):
-            password_for_decrypt = st.text_input("パスワード", type="password")
-            submitted = st.form_submit_button("ロックを解除する")
-
-            if submitted:
-                users_df = read_data('users', users_sheet_id)
-                user_record = users_df[users_df['user_id'] == st.session_state.user_id]
-                if not user_record.empty and EncryptionManager.check_password(password_for_decrypt, user_record.iloc[0]['password_hash']):
-                    st.session_state.enc_manager = EncryptionManager(password_for_decrypt)
-                    st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
-                    st.success("ロックが解除されました！")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("パスワードが間違っています。")
 
     elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
         user_id = st.session_state.user_id
@@ -516,19 +501,15 @@ def main():
                 st.rerun()
         else:
             if not user_data_df.empty:
-                q_numeric_cols_exist = all(col in user_data_df.columns for col in Q_COLS)
-                if q_numeric_cols_exist:
-                    sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-                    latest_q_row = sortable_df[Q_COLS].dropna(how='all')
-                    if not latest_q_row.empty:
-                        latest_q = latest_q_row.iloc[0].to_dict()
-                        default_q_values = {
-                            key.replace('q_', ''): int(val) 
-                            for key, val in latest_q.items() 
-                            if isinstance(val, (int, float)) and pd.notna(val)
-                        }
-                    else:
-                        default_q_values = st.session_state.q_values
+                sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+                latest_q_row = sortable_df[Q_COLS].dropna(how='all')
+                if not latest_q_row.empty:
+                    latest_q = latest_q_row.iloc[0].to_dict()
+                    default_q_values = {
+                        key.replace('q_', ''): int(val) 
+                        for key, val in latest_q.items() 
+                        if isinstance(val, (int, float)) and pd.notna(val)
+                    }
                 else:
                     default_q_values = st.session_state.q_values
             else:
@@ -548,14 +529,12 @@ def main():
 
         with tab1:
             st.header(f"今日の航海日誌を記録する")
-            
             st.markdown("##### 記録する日付")
             today = date.today()
             target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=365), max_value=today, label_visibility="collapsed")
             
-            # 修正点：記録済みかどうかの判定をより厳密に
             is_already_recorded = False
-            if not user_data_df.empty:
+            if not user_data_df.empty and not user_data_df.empty:
                 date_match = user_data_df[user_data_df['date'] == target_date]
                 if not date_match.empty and pd.notna(date_match.iloc[0].get('g_happiness')):
                     is_already_recorded = True
@@ -573,10 +552,11 @@ def main():
                 s_element_values = {}
                 col1, col2 = st.columns(2)
                 
-                # 修正点：空のデータフレームでもエラーにならないように
                 latest_s_elements = pd.Series(dtype=float)
                 if not user_data_df.empty:
-                    latest_s_elements = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False).iloc[0]
+                    sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+                    if not sortable_df.empty:
+                        latest_s_elements = sortable_df.iloc[0]
 
                 for i, domain in enumerate(DOMAINS):
                     container = col1 if i < 4 else col2
@@ -586,74 +566,58 @@ def main():
                             with st.expander(f"**{DOMAIN_NAMES_JP[domain]}**", expanded=True):
                                 for element in elements_to_show:
                                     col_name = f's_element_{element}'
-                                    # 修正点：欠損値でもエラーにならないように
                                     val = latest_s_elements.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
                                     
                                     help_text = ELEMENT_DEFINITIONS.get(element, "")
-                                    
                                     st.markdown(f"**{element}**")
-                                    score = st.slider(
-                                        label=f"slider_{col_name}",
-                                        min_value=0, max_value=100, value=default_val, 
-                                        key=col_name, 
-                                        label_visibility="collapsed",
-                                        help=help_text
-                                    )
+                                    score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed", help=help_text)
                                     st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                                     s_element_values[col_name] = int(score)
                 
                 st.markdown('**総合的な幸福感 (Gt)**')
-                with st.expander("▼ これはなぜ必要？"):
-                    st.markdown(EXPANDER_TEXTS['g_t'])
-                g_happiness = st.slider(
-                    label="slider_g_happiness",
-                    min_value=0, max_value=100, value=50, 
-                    label_visibility="collapsed"
-                )
+                with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
+                g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
                 st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
-                with st.expander("▼ なぜ書くのがおすすめ？"):
-                    st.markdown(EXPANDER_TEXTS['event_log'])
+                with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
                 event_log = st.text_area('', height=100, label_visibility="collapsed")
                 
                 submitted = st.form_submit_button('今日の記録を保存する')
-
-            if submitted:
-                if sum(st.session_state.q_values.values()) != 100:
-                    st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
-                else:
-                    new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
-                    new_record.update(s_element_values)
-                                        
-                    encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
-                    
-                    consent_status = st.session_state.get('consent', False)
-
-                    new_record.update({
-                        'user_id': user_id, 'date': target_date, 'mode': mode_string,
-                        'consent': consent_status,
-                        'g_happiness': int(g_happiness), 'event_log': encrypted_log
-                    })
-                    new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
-
-                    new_df_row = pd.DataFrame([new_record])
-                    
-                    if not all_data_df.empty:
-                        condition = (all_data_df['user_id'] == user_id) & (pd.to_datetime(all_data_df['date']).dt.date == target_date)
-                        all_data_df = all_data_df[~condition]
-
-                    all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
-                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
-                    
-                    if write_data('data', data_sheet_id, all_data_df_updated):
-                        st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
-                        st.balloons()
-                        time.sleep(1)
-                        st.rerun()
+                
+                if submitted:
+                    if sum(st.session_state.q_values.values()) != 100:
+                        st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
                     else:
-                         st.error("データの保存に失敗しました。後でもう一度お試しください。")
+                        new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
+                        new_record.update(s_element_values)
+                        encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
+                        consent_status = st.session_state.get('consent', False)
+
+                        new_record.update({
+                            'user_id': user_id, 'date': target_date, 'mode': mode_string,
+                            'consent': consent_status,
+                            'g_happiness': int(g_happiness), 'event_log': encrypted_log
+                        })
+                        new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+
+                        new_df_row = pd.DataFrame([new_record])
+                        
+                        if not all_data_df.empty:
+                            condition = (all_data_df['user_id'] == user_id) & (pd.to_datetime(all_data_df['date']).dt.date == target_date)
+                            all_data_df = all_data_df[~condition]
+
+                        all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
+                        all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+                        
+                        if write_data('data', data_sheet_id, all_data_df_updated):
+                            st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                             st.error("データの保存に失敗しました。後でもう一度お試しください。")
 
         with tab2:
             st.header('📊 あなたの航海チャート')
@@ -757,8 +721,8 @@ def main():
             st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
             st.markdown("---")
             st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
-            st.warning("この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています...")
-            st.error("**【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません...**")
+            st.warning("""この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています...""")
+            st.error("""**【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません...**""")
             st.markdown("---")
 
             with st.form("register_form"):
@@ -769,12 +733,9 @@ def main():
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
 
                 if submitted:
-                    if not agreement:
-                        st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
-                    elif len(new_password) < 8:
-                        st.error("パスワードは8文字以上で設定してください。")
-                    elif new_password != new_password_confirm:
-                        st.error("パスワードが一致しません。")
+                    if not agreement: st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
+                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
                     else:
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
@@ -803,7 +764,6 @@ def main():
                             user_record = users_df[users_df['user_id'] == user_id_input]
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
                                 st.session_state.user_id = user_id_input
-                                # 修正点：ここで復号マネージャーも作成し、直接UNLOCKEDへ
                                 st.session_state.enc_manager = EncryptionManager(password_input)
                                 st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
                                 st.success("乗船に成功しました！")
@@ -817,4 +777,4 @@ def main():
                         st.warning("合い言葉とパスワードの両方を入力してください。")
 
 if __name__ == '__main__':
-    main()```
+    main()
