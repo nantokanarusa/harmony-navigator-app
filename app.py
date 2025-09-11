@@ -707,7 +707,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.36 - State Management Fix & Final Code')
+    st.caption('v7.0.37 - Real-time Dashboard Update & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
