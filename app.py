@@ -538,7 +538,7 @@ def show_legal_documents():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.15 - Full Legal Text & Final Review')
+    st.caption('v7.0.16 - Advanced Dashboard Visualization')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
