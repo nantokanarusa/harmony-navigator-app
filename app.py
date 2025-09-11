@@ -1,4 +1,4 @@
-# app.py (v7.0.11 - Final Overwrite Logic Fix)
+# app.py (v7.0.12 - Final Complete Code & UX Polish)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -236,31 +236,38 @@ def calculate_ahp_weights(comparisons: dict, items: list) -> np.ndarray:
         
     return int_weights
 
-def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
-    if df_processed.empty or 'H' not in df_processed.columns or 'g_happiness' not in df_processed.columns or df_processed.dropna(subset=['H', 'g_happiness']).empty:
+def analyze_discrepancy(df_processed: pd.DataFrame):
+    df_analysis = df_processed.dropna(subset=['H', 'g_happiness']).copy()
+    if len(df_analysis) < 2:
         return
-    latest_record = df_processed.dropna(subset=['H', 'g_happiness']).iloc[-1]
+
+    df_analysis['gap'] = df_analysis['g_happiness'] - (df_analysis['H'] * 100.0)
+    
+    std_gap = df_analysis['gap'].std()
+    dynamic_threshold = max(15, 1.0 * std_gap) 
+
+    latest_record = df_analysis.iloc[-1]
     latest_h = float(latest_record['H']) * 100.0
     latest_g = float(latest_record['g_happiness'])
-    gap = latest_g - latest_h
+    latest_gap = latest_record['gap']
 
     st.subheader("💡 インサイト・エンジン")
     with st.expander("▼ これは、モデルの計算値(H)とあなたの実感(G)の『ズレ』に関する分析です", expanded=True):
-        if gap > threshold:
+        if latest_gap > dynamic_threshold:
             st.info(f"""
                 **【幸福なサプライズ！🎉】**
 
-                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルが算出した**調和度指数（H = {int(latest_h)}点 / 100点満点換算）**を、あなたの**普段のブレ幅（{dynamic_threshold:.1f}点）**以上に大きく上回りました。
                 
                 これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
                 
                 **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
                 """)
-        elif gap < -threshold:
+        elif latest_gap < -dynamic_threshold:
             st.warning(f"""
                 **【隠れた不満？🤔】**
 
-                あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
+                あなたの**実感（G = {int(latest_g)}点）**は、モデルが算出した**調和度指数（H = {int(latest_h)}点 / 100点満点換算）**を、あなたの**普段のブレ幅（{dynamic_threshold:.1f}点）**以上に大きく下回りました。
 
                 価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
 
@@ -270,7 +277,7 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
             st.success(f"""
                 **【順調な航海です！✨】**
 
-                あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
+                あなたの**実感（G = {int(latest_g)}点）**と、モデルが算出した**調和度指数（H = {int(latest_h)}点 / 100点満点換算）**は、よく一致しています。
                 
                 あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
                 """)
@@ -392,7 +399,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.11 - Final Overwrite Logic Fix')
+    st.caption('v7.0.12 - Dynamic Discrepancy Analysis')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -713,7 +720,12 @@ def main():
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
-            st.info("あなただけのアカウントを作成します。...")
+            st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
+            st.markdown("---")
+            st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
+            st.warning("""この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています...""")
+            st.error("""**【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません...**""")
+            st.markdown("---")
 
             with st.form("register_form"):
                 agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
@@ -723,9 +735,9 @@ def main():
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
 
                 if submitted:
-                    if not agreement: st.error("...")
-                    elif len(new_password) < 8: st.error("...")
-                    elif new_password != new_password_confirm: st.error("...")
+                    if not agreement: st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
+                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
                     else:
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
