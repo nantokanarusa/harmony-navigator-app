@@ -1,4 +1,4 @@
-# app.py (v7.0.24 - Final Data Pipeline & Code Completion)
+# app.py (v7.0.27 - Absolutely Final & No Omissions)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,12 +25,6 @@ DOMAIN_NAMES_JP_DICT = {
 }
 DOMAIN_NAMES_JP_VALUES = [DOMAIN_NAMES_JP_DICT[d] for d in DOMAINS]
 
-SHORT_ELEMENTS = {
-    'health': ['睡眠と休息', '身体的な快調さ'], 'relationships': ['親密な関係', '利他性・貢献'],
-    'meaning': ['仕事・学業の充実感', '価値との一致'], 'autonomy': ['自己決定感', '自己成長の実感'],
-    'finance': ['経済的な安心感', '職業的な達成感'], 'leisure': ['心の平穏', '楽しさ・喜び'],
-    'competition': ['優越感・勝利']
-}
 LONG_ELEMENTS = {
     'health': ['睡眠', '食事', '運動', '身体的快適さ', '感覚的快楽', '性的満足'],
     'relationships': ['家族', 'パートナー・恋愛', '友人', '社会的承認', '利他性・貢献', '共感・繋がり'],
@@ -45,38 +39,30 @@ Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 
 ELEMENT_DEFINITIONS = {
-    '睡眠と休息': '心身ともに、十分な休息が取れたと感じる度合い。例：朝、すっきりと目覚められたか。',
-    '身体的な快調さ': '活力を感じ、身体的な不調（痛み、疲れなど）がなかった度合い。',
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。',
     '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
     '運動': '体を動かす習慣があり、それが心身の快調さに繋がっていた度合い。',
     '身体的快適さ': '慢性的な痛みや、気になる不調がなく、快適に過ごせた度合い。',
     '感覚的快楽': '五感を通じて、心地よいと感じる瞬間があった度合い。例：温かいお風呂、心地よい音楽。',
     '性的満足': '自身の性的な欲求や、パートナーとの親密さに対して、満足感があった度合い。',
-    '親密な関係': '家族やパートナー、親しい友人との、温かい、あるいは安心できる繋がりを感じた度合い。',
-    '利他性・貢献': '自分の行動が、誰かの役に立った、あるいは喜ばれたと感じた度合い。例：「ありがとう」と言われた。',
     '家族': '家族との間に、安定した、あるいは温かい関係があった度合い。',
     'パートナー・恋愛': 'パートナーとの間に、愛情や深い理解、信頼があった度合い。',
     '友人': '気軽に話せたり、支え合えたりする友人がおり、良い関係を築けていた度合い。',
     '社会的承認': '周囲の人々（職場、地域など）から、一員として認められ、尊重されていると感じた度合い。',
+    '利他性・貢献': '自分の行動が、誰かの役に立った、あるいは喜ばれたと感じた度合い。例：「ありがとう」と言われた。',
     '共感・繋がり': '他者の気持ちに寄り添ったり、逆に寄り添ってもらったりして、人との深い繋がりを感じた度合い。',
-    '仕事・学業の充実感': '自分の仕事や学びに、やりがいや達成感を感じた度合い。',
-    '価値との一致': '自分の大切にしている価値観や信念に沿って、行動できたと感じられる度合い。',
     'やりがい': '自分の仕事や活動（学業、家事、趣味など）に、意義や目的を感じ、夢中になれた度合い。',
     '達成感': '何か具体的な目標を達成したり、物事を最後までやり遂げたりする経験があった度合い。',
     '信念との一致': '自分の「こうありたい」という価値観や、倫理観に沿った行動ができた度合い。',
     'キャリアの展望': '自分の将来のキャリアに対して、希望や前向きな見通しを持てていた度合い。',
     '社会への貢献': '自分の活動が、所属するコミュニティや、より大きな社会に対して、良い影響を与えていると感じられた度合い。',
     '有能感': '自分のスキルや能力を、うまく発揮できているという感覚があった度合い。',
-    '自己決定感': '今日の自分の行動は、自分で決めたと感じられる度合い。',
-    '自己成長の実感': '何かを乗り越え、自分が成長した、あるいは新しいことを学んだと感じた度合い。',
     '自由・自己決定': '自分の人生における重要な事柄を、他者の圧力ではなく、自分自身の意志で選択・決定できていると感じた度合い。',
     '挑戦・冒険': '新しいことに挑戦したり、未知の経験をしたりして、刺激や興奮を感じた度合い。',
+    '自己成長の実感': '何かを乗り越えたり、新しいことを学んだりして、自分が成長していると感じられた度合い。',
     '変化の享受': '環境の変化や、新しい考え方を、ポジティブに受け入れ、楽しむことができた度合い。',
     '独立・自己信頼': '自分の力で物事に対処できるという、自分自身への信頼感があった度合い。',
     '好奇心': '様々な物事に対して、知的な好奇心を持ち、探求することに喜びを感じた度合い。',
-    '経済的な安心感': '日々の生活や将来のお金について、過度な心配をせず、安心して過ごせた度合い。',
-    '職業的な達成感': '仕事や学業において、物事をうまくやり遂げた、あるいは目標に近づいたと感じた度合い。',
     '経済的安定': '「来月の支払いは大丈夫かな…」といった、短期的なお金の心配がない状態。',
     '経済的余裕': '生活必需品だけでなく、趣味や自己投資など、人生を豊かにすることにもお金を使える状態。',
     '労働環境': '物理的にも、精神的にも、安全で、健康的に働ける環境があった度合い。',
@@ -84,13 +70,12 @@ ELEMENT_DEFINITIONS = {
     '公正な評価': '自分の働きや成果が、正当に評価され、報酬に反映されていると感じられた度合い。',
     '職業的安定性': '「この先も、この仕事を続けていけるだろうか」といった、長期的なキャリアや収入に対する不安がない状態。',
     '心の平穏': '過度な不安やストレスなく、精神的に安定していた度合い。',
-    '楽しさ・喜び': '純粋に「楽しい」と感じたり、笑ったりする瞬間があった度合い。',
     '自己肯定感': '自分の長所も短所も含めて、ありのままの自分を、肯定的に受け入れることができた度合い。',
     '創造性の発揮': '何かを創作したり、新しいアイデアを思いついたりして、創造的な喜びを感じた度合い。',
     '感謝': '日常の小さな出来事や、周りの人々に対して、自然と「ありがたい」という気持ちが湧いた度合い。',
     '娯楽・楽しさ': '趣味に没頭したり、友人と笑い合ったり、純粋に「楽しい」と感じる時間があった度合い。',
     '芸術・自然': '美しい音楽や芸術、あるいは雄大な自然に触れて、心が動かされたり、豊かになったりする経験があった度合い。',
-    '優越感・勝利': '他者との比較や、スポーツ、仕事、学業などにおける競争において、優位に立てたと感じた度合い。'
+    '優越感・勝利': '他者との比較や競争において、優位に立てたと感じ、満足感を得た。'
 }
 EXPANDER_TEXTS = {
     'q_t': """
@@ -208,21 +193,24 @@ class EncryptionManager:
             return "[復号に失敗しました]"
 
 # --- C. コア計算 & ユーティリティ関数 ---
-def calculate_s_domains_from_elements(s_element_values: dict) -> dict:
+def calculate_s_domains_from_row(row: pd.Series) -> pd.Series:
     s_domain_scores = {}
+    
     for domain, elements in LONG_ELEMENTS.items():
-        domain_scores_list = [
-            s_element_values[f's_element_{e}'] 
-            for e in elements 
-            if f's_element_{e}' in s_element_values and pd.notna(s_element_values[f's_element_{e}'])
-        ]
+        domain_scores_list = []
+        for e in elements:
+            col = f's_element_{e}'
+            if col in row and pd.notna(row[col]):
+                domain_scores_list.append(row[col])
         
         if domain_scores_list:
             s_domain_scores['s_' + domain] = int(round(np.mean(domain_scores_list)))
         else:
-            s_domain_scores['s_' + domain] = pd.NA
+            # s_element列が存在しない、またはすべてNaNの場合、
+            # 既存のs_domain列があればそれを維持、なければNaN
+            s_domain_scores['s_' + domain] = row.get('s_' + domain, np.nan)
             
-    return s_domain_scores
+    return pd.Series(s_domain_scores)
 
 @st.cache_data
 def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
@@ -230,10 +218,12 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
     if df_copy.empty:
         return df_copy
     
-    # ★★★ 修正箇所 ★★★
-    # s_domain列を、常にs_element列から再計算する
-    temp_s_domains = df_copy.apply(lambda row: pd.Series(calculate_s_domains_from_elements(row.to_dict())), axis=1)
-    df_copy[S_COLS] = temp_s_domains[S_COLS]
+    # s_domain列が存在しない、またはNaNを含む行に対してのみ、s_elementから再計算
+    s_domain_updates = df_copy.apply(
+        lambda row: calculate_s_domains_from_row(row) if pd.isna(row[S_COLS]).any() else row[S_COLS],
+        axis=1
+    )
+    df_copy[S_COLS] = s_domain_updates
     
     for col in Q_COLS + S_COLS:
          if col in df_copy.columns:
@@ -420,6 +410,14 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
+        all_possible_cols = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+        for col in all_possible_cols:
+            if col not in df_copy.columns:
+                df_copy[col] = ''
+        
+        # Ensure correct column order
+        df_copy = df_copy[all_possible_cols]
+        
         df_copy = df_copy.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
         
         worksheet.clear()
@@ -436,15 +434,13 @@ def show_welcome_and_guide():
     st.subheader("「Harmony Navigator」取扱説明書")
     st.markdown("---")
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
-    st.markdown("""
-    「もっと幸せになりたい」と願いながらも、漠然とした不安や、**「理想（こうありたい自分）」**と**「現実（実際に経験した一日）」**の間の、言葉にならない『ズレ』に、私たちはしばしば悩まされます。
+    st.markdown("""「もっと幸せになりたい」と願いながらも、漠然とした不安や、**「理想（こうありたい自分）」**と**「現実（実際に経験した一日）」**の間の、言葉にならない『ズレ』に、私たちはしばしば悩まされます。
     このアプリは、その『ズレ』の正体を可視化し、あなた自身が人生の舵を取るための、**実践的な「航海術」**を提供する目的で開発されました。
     これは、あなただけの**「海図（チャート）」**です。この海図を使えば、
     - **自分の現在地**（今の心の状態、つまり『実践秩序』）を客観的に知り、
     - **目的地**（自分が本当に大切にしたいこと、つまり『情報秩序』）を明確にし、
     - **航路**（日々の選択）を、あなた自身で賢明に調整していくことができます。
-    あなたの人生という、唯一無二の航海。その冒険のパートナーとして、このアプリは生まれました。
-    """)
+    あなたの人生という、唯一無二の航海。その冒険のパートナーとして、このアプリは生まれました。""")
     st.markdown("---")
     st.subheader("🛡️【最重要】あなたのプライバシーは、「二重の仮面」によって、設計上保護されます")
     with st.expander("▼ 解説：究極のプライバシー保護、その二つの秘密"):
@@ -595,10 +591,16 @@ def show_legal_documents():
         - **連絡先**: [あなたの連絡先メールアドレスなど]
         """)
 
+def get_safe_index(options, value):
+    try:
+        return options.index(value)
+    except ValueError:
+        return 0
+
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.24 - Final Data Pipeline & Code Completion')
+    st.caption('v7.0.27 - Absolutely Final & No Omissions')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -643,6 +645,7 @@ def main():
 
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+            user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
         else:
             user_data_df = pd.DataFrame()
 
@@ -739,28 +742,32 @@ def main():
                 st.warning(f"⚠️ {target_date.strftime('%Y-%m-%d')} のデータは既に記録されています。保存すると上書きされます。")
 
             st.markdown("##### 記録モード")
-            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ (14項目)', '🔬 ディープ・ダイブ (37項目)'), horizontal=True, label_visibility="collapsed")
-            
-            active_elements = SHORT_ELEMENTS if 'クイック' in input_mode else LONG_ELEMENTS
-            mode_string = 'quick' if 'クイック' in input_mode else 'deep'
+            input_mode = st.radio("記録モード:", ('🚀 クイック・ログ (ドメイン別評価)', '🔬 ディープ・ダイブ (詳細項目評価)'), horizontal=True)
             
             with st.form(key='daily_input_form'):
                 s_element_values = {}
-                col1, col2 = st.columns(2)
-                
-                latest_s_elements = pd.Series(dtype=float)
-                if not user_data_df.empty:
-                    sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-                    if not sortable_df.empty:
-                        latest_s_elements = sortable_df.iloc[0]
+                s_domain_values = {}
 
-                for i, domain in enumerate(DOMAINS):
-                    container = col1 if i < 4 else col2
-                    with container:
-                        elements_to_show = active_elements.get(domain, [])
-                        if elements_to_show:
+                if 'クイック' in input_mode:
+                    mode_string = 'quick'
+                    st.info("今日一日を振り返り、7つの幸福の領域が、それぞれどれくらい満たされていたかを評価してください。")
+                    for domain in DOMAINS:
+                        s_domain_values['s_' + domain] = st.slider(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", 0, 100, 50)
+                
+                else:
+                    mode_string = 'deep'
+                    col1, col2 = st.columns(2)
+                    latest_s_elements = pd.Series(dtype=float)
+                    if not user_data_df.empty:
+                        sortable_df = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
+                        if not sortable_df.empty:
+                            latest_s_elements = sortable_df.iloc[0]
+
+                    for i, domain in enumerate(DOMAINS):
+                        container = col1 if i < 4 else col2
+                        with container:
                             with st.expander(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", expanded=True):
-                                for element in elements_to_show:
+                                for element in LONG_ELEMENTS[domain]:
                                     col_name = f's_element_{element}'
                                     val = latest_s_elements.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
@@ -770,7 +777,7 @@ def main():
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
                                     st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                                     s_element_values[col_name] = int(score)
-                
+
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
@@ -786,12 +793,15 @@ def main():
                     if sum(st.session_state.q_values.values()) != 100:
                         st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
                     else:
-                        new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
-                        new_record.update(s_element_values)
-                        
-                        s_domain_scores = calculate_s_domains_from_elements(s_element_values)
-                        new_record.update(s_domain_scores)
-                        
+                        new_record = {}
+                        if mode_string == 'deep':
+                            new_record.update({col: pd.NA for col in ALL_ELEMENT_COLS})
+                            new_record.update(s_element_values)
+                            s_domain_scores = calculate_s_domains_from_row(pd.Series(new_record))
+                            new_record.update(s_domain_scores.to_dict())
+                        else: # quick
+                            new_record.update(s_domain_values)
+
                         encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
                         
                         user_info = users_df[users_df['user_id'] == user_id]
@@ -827,7 +837,7 @@ def main():
                 st.markdown(EXPANDER_TEXTS['dashboard'])
 
             df_to_process = user_data_df.copy()
-            if df_to_process.empty or df_to_process.drop(columns=['user_id', 'date', 'mode', 'consent', 'event_log'], errors='ignore').dropna(how='all').empty:
+            if df_to_process.empty:
                 st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
             else:
                 df_processed = calculate_metrics(df_to_process, alpha=0.6)
@@ -894,7 +904,7 @@ def main():
                               name='理想 (価値観)'
                         ))
 
-                        dynamic_range_max = max(40, int(avg_q.max()) + 10)
+                        dynamic_range_max = max(40, int(avg_q.max()) + 10) if avg_q.max() > 0 else 40
                         fig.update_layout(
                           polar=dict(
                             radialaxis=dict(
@@ -943,12 +953,6 @@ def main():
             with st.form("profile_form"):
                 current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
                 
-                def get_safe_index(options, value):
-                    try:
-                        return options.index(value)
-                    except ValueError:
-                        return 0
-
                 age_group = st.selectbox("年代を選択してください", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group', '未選択')))
                 gender = st.selectbox("性別を選択してください", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender', '未選択')))
                 occupation_category = st.selectbox("最も近い職業カテゴリを選択してください", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category', '未選択')))
