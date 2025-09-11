@@ -1,4 +1,4 @@
-# app.py (v7.0.39 - Critical q_t Loading Logic Fix & Complete Code)
+# app.py (v7.0.40 - Timestamp & Robust q_t Loading Fix & Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,9 +15,12 @@ import gspread
 from google.oauth2.service_account import Credentials
 import plotly.graph_objects as go
 import plotly.express as px
+import pytz
 
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
+JST = pytz.timezone('Asia/Tokyo')
+
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP_DICT = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -410,11 +413,14 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
+        if 'record_timestamp' in df_copy.columns:
+            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp']).dt.tz_localize(None).isoformat()
+        
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
             element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
             db_schema_cols = (
-                ['user_id', 'date', 'consent', 'mode'] + 
+                ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + 
                 Q_COLS + S_COLS + 
                 ['g_happiness', 'event_log'] +
                 element_cols_ordered
@@ -605,7 +611,7 @@ def get_safe_index(options, value):
         return 0
 
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
-    EXPECTED_COLUMNS = ['user_id', 'date', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
+    EXPECTED_COLUMNS = ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
     missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
 
@@ -617,7 +623,10 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
     
     df_migrated = df.copy()
     for col in missing_cols:
-        df_migrated[col] = pd.NA
+        if col == 'record_timestamp':
+            df_migrated[col] = pd.to_datetime(df_migrated['date']) + timedelta(hours=12)
+        else:
+            df_migrated[col] = pd.NA
 
     final_cols_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns]
     df_migrated = df_migrated[final_cols_order]
@@ -688,12 +697,12 @@ def run_wizard_interface(container):
                     user_id = st.session_state.user_id
                     all_data_df = read_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"])
                     
-                    new_record = {'user_id': user_id, 'date': date.today()}
+                    new_record = {'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(JST)}
                     new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
                     new_df_row = pd.DataFrame([new_record])
 
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
-                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
 
                     if write_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"], all_data_df_updated):
                         st.session_state.auth_status = "INITIALIZING_SESSION"
@@ -704,9 +713,11 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
+# (ここから下のmain関数と、その中のUI描画コードは、
+# 前回のv7.0.38の回答と全く同じです。省略せずに全て記述します。)
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.39 - Critical q_t Loading Logic Fix & Complete Code')
+    st.caption('v7.0.40 - Timestamp & Robust q_t Loading Fix & Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -755,6 +766,7 @@ def main():
                             st.session_state.enc_manager = EncryptionManager(new_password)
                             st.session_state.auth_status = "AWAITING_ID"
                             st.rerun()
+
         with door2:
             with st.form("login_form"):
                 user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
@@ -818,12 +830,15 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         
-        q_data_rows = user_data_df[Q_COLS].dropna(how='all')
+        if 'record_timestamp' not in user_data_df.columns:
+             user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['date'])
+        
+        user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['record_timestamp'], errors='coerce')
+
+        q_data_rows = user_data_df.dropna(subset=Q_COLS, how='all')
         
         if not q_data_rows.empty:
-            valid_q_indices = q_data_rows.index
-            q_df = user_data_df.loc[valid_q_indices]
-            latest_q_row = q_df.sort_values(by='date', ascending=False).iloc[0]
+            latest_q_row = q_data_rows.sort_values(by='record_timestamp', ascending=False).iloc[0]
             
             latest_q_dict = latest_q_row[Q_COLS].to_dict()
             st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q_dict.items() if isinstance(val, (int, float)) and pd.notna(val)}
@@ -953,9 +968,13 @@ def main():
                         consent_status = user_info_in_form['consent'].iloc[0] if not user_info_in_form.empty and 'consent' in user_info_in_form.columns else False
 
                         new_record.update({
-                            'user_id': user_id, 'date': target_date, 'mode': mode_string,
+                            'user_id': user_id, 
+                            'date': target_date,
+                            'record_timestamp': datetime.now(JST),
+                            'mode': mode_string,
                             'consent': consent_status,
-                            'g_happiness': int(g_happiness), 'event_log': encrypted_log
+                            'g_happiness': int(g_happiness), 
+                            'event_log': encrypted_log
                         })
                         new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
 
@@ -967,7 +986,7 @@ def main():
                             all_data_df_to_update = all_data_df_to_update[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df_to_update, new_df_row], ignore_index=True)
-                        all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
+                        all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
                         
                         if write_data('data', data_sheet_id, all_data_df_updated):
                             st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
@@ -1182,13 +1201,11 @@ def main():
             st.subheader("このアプリについて")
             show_welcome_and_guide()
         
-    else: # NOT_LOGGED_IN
+    else:
+        # NOT_LOGGED_IN
         show_welcome_and_guide()
-        
         st.subheader("あなたの旅を、ここから始めましょう")
-        
         show_legal_documents()
-        
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
@@ -1198,7 +1215,6 @@ def main():
                 new_password_confirm = st.text_input("パスワード（確認用）", type="password")
                 consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
                 submitted = st.form_submit_button("同意して登録し、秘密の合い言葉を発行する")
-
                 if submitted:
                     if not agreement: st.error("旅を始めるには、利用規約とプライバシーポリシーに同意していただく必要があります。")
                     elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
@@ -1230,7 +1246,6 @@ def main():
                 user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
                 password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
                 submitted = st.form_submit_button("乗船する")
-
                 if submitted:
                     if user_id_input and password_input:
                         users_df = read_data('users', users_sheet_id)
