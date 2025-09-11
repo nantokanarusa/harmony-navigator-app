@@ -439,7 +439,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v5.0.2 - The Unchained Phoenix')
+    st.caption('v7.0.0 - The Synthesis / The Absolute Final Code')
 
     # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
     # ★ 最初に、全ての調理道具を、完璧に準備する！ ★
