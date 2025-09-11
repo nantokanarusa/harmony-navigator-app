@@ -1,4 +1,4 @@
-# app.py (v7.0.7 - Improved UX & Decryption Display)
+# app.py (v7.0.8 - Critical Calculation & UI Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -183,8 +183,9 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
          if col in df_copy.columns:
             df_copy[col] = df_copy[col].fillna(0)
     
+    # ★★★ 修正箇所 ★★★
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
-    q_vectors = df_copy[Q_COLS].values
+    q_vectors = df_copy[Q_COLS].values / 100.0  # q_tも100で割って正規化
     
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
@@ -249,29 +250,21 @@ def analyze_discrepancy(df_processed: pd.DataFrame, threshold: int = 20):
         if gap > threshold:
             st.info(f"""
                 **【幸福なサプライズ！🎉】**
-
                 あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく上回りました。
-                
                 これは、あなたが**まだ言葉にできていない、新しい価値観**を発見したサインかもしれません。
-                
                 **問い：** 今日の記録を振り返り、あなたが設定した価値観（q_t）では捉えきれていない、予期せぬ喜びの源泉は何だったでしょうか？
                 """)
         elif gap < -threshold:
             st.warning(f"""
                 **【隠れた不満？🤔】**
-
                 あなたの**実感（G = {int(latest_g)}点）**は、モデルの計算値（H = {int(latest_h)}点）を大きく下回りました。
-
                 価値観に沿った生活のはずなのに、何かが満たされていないようです。見過ごしている**ストレス要因や、理想と現実の小さなズレ**があるのかもしれません。
-
                 **問い：** 今日の記録を振り返り、あなたの幸福感を静かに蝕んでいた「見えない重り」は何だったでしょうか？
                 """)
         else:
             st.success(f"""
                 **【順調な航海です！✨】**
-
                 あなたの**実感（G = {int(latest_g)}点）**と、モデルの計算値（H = {int(latest_h)}点）は、よく一致しています。
-                
                 あなたの自己認識と、現実の経験が、うまく調和している状態です。素晴らしい！
                 """)
 
@@ -392,7 +385,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.7 - Improved UX & Decryption')
+    st.caption('v7.0.8 - Final Calculation & UI Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -558,13 +551,15 @@ def main():
                                     
                                     help_text = ELEMENT_DEFINITIONS.get(element, "")
                                     st.markdown(f"**{element}**")
-                                    st.caption(help_text) # ★修正点1: helpをcaptionに変更
+                                    st.caption(help_text)
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
+                                    st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                                     s_element_values[col_name] = int(score)
                 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
+                st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
@@ -579,7 +574,10 @@ def main():
                         new_record = {col: pd.NA for col in ALL_ELEMENT_COLS}
                         new_record.update(s_element_values)
                         encrypted_log = st.session_state.enc_manager.encrypt_log(event_log)
-                        consent_status = st.session_state.get('consent', False)
+                        
+                        users_df = read_data('users', users_sheet_id)
+                        user_info = users_df[users_df['user_id'] == user_id]
+                        consent_status = user_info['consent'].iloc[0] if not user_info.empty else False
 
                         new_record.update({
                             'user_id': user_id, 'date': target_date, 'mode': mode_string,
@@ -651,7 +649,6 @@ def main():
                     st.subheader('調和度 (H) の推移')
                     st.line_chart(df_processed.set_index('date')['H'])
 
-                    # ★★★ 修正箇所2 ★★★
                     st.subheader('全記録データ')
                     df_display = user_data_df.copy()
                     if 'event_log' in df_display.columns:
@@ -678,6 +675,7 @@ def main():
             st.markdown('---')
             st.subheader("アカウント削除")
             with st.form("delete_form"):
+                st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
                 password_for_delete = st.text_input("削除するには、あなたのパスワードを正確に入力してください:", type="password")
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
 
@@ -708,8 +706,7 @@ def main():
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
-            st.info("あなただけのアカウントを作成します。...")
-
+            st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
             with st.form("register_form"):
                 agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
                 new_password = st.text_input("パスワード（8文字以上）", type="password")
@@ -718,9 +715,9 @@ def main():
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
 
                 if submitted:
-                    if not agreement: st.error("...")
-                    elif len(new_password) < 8: st.error("...")
-                    elif new_password != new_password_confirm: st.error("...")
+                    if not agreement: st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
+                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
                     else:
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
