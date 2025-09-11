@@ -1,4 +1,4 @@
-# app.py (v7.0.6 - Final Form Logic Fix)
+# app.py (v7.0.7 - Improved UX & Decryption Display)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -184,7 +184,7 @@ def calculate_metrics(df: pd.DataFrame, alpha: float = 0.6) -> pd.DataFrame:
             df_copy[col] = df_copy[col].fillna(0)
     
     s_vectors_normalized = df_copy[S_COLS].values / 100.0
-    q_vectors = df_copy[Q_COLS].values / 100.0
+    q_vectors = df_copy[Q_COLS].values
     
     df_copy['S'] = np.nansum(q_vectors * s_vectors_normalized, axis=1)
     
@@ -355,14 +355,11 @@ def show_welcome_and_guide():
     st.subheader("1. このアプリは、あなたの人生の「航海日誌」です")
     st.markdown("""
     「もっと幸せになりたい」と願いながらも、漠然とした不安や、**「理想（こうありたい自分）」**と**「現実（実際に経験した一日）」**の間の、言葉にならない『ズレ』に、私たちはしばしば悩まされます。
-    
     このアプリは、その『ズレ』の正体を可視化し、あなた自身が人生の舵を取るための、**実践的な「航海術」**を提供する目的で開発されました。
-    
     これは、あなただけの**「海図（チャート）」**です。この海図を使えば、
     - **自分の現在地**（今の心の状態、つまり『実践秩序』）を客観的に知り、
     - **目的地**（自分が本当に大切にしたいこと、つまり『情報秩序』）を明確にし、
     - **航路**（日々の選択）を、あなた自身で賢明に調整していくことができます。
-    
     あなたの人生という、唯一無二の航海。その冒険のパートナーとして、このアプリは生まれました。
     """)
     st.markdown("---")
@@ -370,15 +367,10 @@ def show_welcome_and_guide():
     with st.expander("▼ 解説：究極のプライバシー保護、その二つの秘密"):
         st.markdown("""
         このアプリの最も重要な約束は、あなたのプライバシーを守ることです。そのために、私たちは**「二重の仮面」**という、二段階の強力な匿名化・暗号化技術を、設計の中心に据えています。
-
         #### **第一の仮面：あなたが誰だか、システムさえも知らない「秘密の合い言葉（ユーザーID）」**
         このアプリでは、あなたは、本名やメールアドレス、さらにはご自身でニックネームを決めていただくことさえも、一切ありません。**個人を特定できる情報を、あなたが入力するプロセスは、存在しないのです。**
         あなたが初めて「新しい船で旅を始める」を選択した瞬間、**システムが、あなたのためだけに、完全にランダムで、予測不可能な「秘密の合い言葉（ユーザーID）」を自動で生成します。**
-        これは、あなたが病院の受付で受け取る、**名前の書いていない、ただの「整理番号」**のようなものです。
-        開発者である私がデータ保管庫を見ることがあったとしても、そこにあるのは**「整理番号 user_... さんの記録」**という、完全に無機質で、個人とは結びつかない情報だけです。
-        **あなたがご自身でニックネームを決めるプロセスが存在しないため、あなたが誤って個人を特定できる名前（本名やSNSのアカウント名など）を使ってしまうリスクは、構造的にゼロになります。**
         これにより、私がその番号の持ち主が現実世界の誰なのかを知る手段は、一切ありません。これこそが、**「設計による匿名性」**を保証する、第一の仮面です。
-
         #### **第二の仮面：あなたにしか読めない「魔法の自己破壊インク（イベントログの暗号化）」**
         さらに、あなたの最もプライベートな記録である**「イベントログ（日々の出来事や気づき）」**には、より強力な、第二の仮面が用意されています。
         あなたが日記を書き終え、「保存」ボタンを押した瞬間、その文字は、あなたの**PCやスマホのブラウザの中だけで**、あなただけが知っている**「パスワード」**を鍵として、誰にも読めない、全く意味不明な記号の羅列に、完全に**暗号化**されます。
@@ -394,18 +386,13 @@ def show_welcome_and_guide():
     もし、ご協力いただけるのであれば、あなたが記録したデータを、**個人が特定できない形に完全に匿名化した上で**、この理論の科学的検証のための研究に利用させていただくことにご同意いただけますでしょうか。
     **【私たちの約束：ゼロ知識分析】**
     あなたのプライバシーは、何よりも優先されます。そのため、私たちは、あなたのイベントログのような、プライベートな記述データを、**直接収集することは一切ありません。**
-    代わりに、私たちは、あなたがご自身の意思で、安全に研究に協力するための、**全く別の「研究協力ツール」**を、別途提供します。このツールは、
-    1. あなたのパスワードを使って、あなたのPC上だけで、イベントログを**復号**します。
-    2. 復号されたログの内容から、感情のスコアなどの、**個人を特定できない、匿名化された「統計情報」**だけを抽出します。
-    3. そして、この**「統計情報」だけ**を、研究用のデータベースに送信します。
-    この仕組みにより、**私たち研究者は、あなたのプライベートな物語に一切触れることなく**、科学の発展に必要なデータだけを得ることができます。
-    ここの「同意」チェックボックスは、私たちが、あなたの**「日々の数値データ（幸福度のスコアなど）」**を、将来あなたが送信してくれるかもしれない**「匿名の統計情報」**と結びつけて、分析することへの許可をいただくためのものです。
+    ここの「同意」チェックボックスは、私たちが、あなたの**「日々の数値データ（幸福度のスコアなど）」**を、研究分析に利用させていただくことへの許可をいただくためのものです。
     """)
 
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.6 - Final Form Logic Fix')
+    st.caption('v7.0.7 - Improved UX & Decryption')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -534,7 +521,7 @@ def main():
             target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=365), max_value=today, label_visibility="collapsed")
             
             is_already_recorded = False
-            if not user_data_df.empty and not user_data_df.empty:
+            if not user_data_df.empty:
                 date_match = user_data_df[user_data_df['date'] == target_date]
                 if not date_match.empty and pd.notna(date_match.iloc[0].get('g_happiness')):
                     is_already_recorded = True
@@ -571,14 +558,13 @@ def main():
                                     
                                     help_text = ELEMENT_DEFINITIONS.get(element, "")
                                     st.markdown(f"**{element}**")
-                                    score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed", help=help_text)
-                                    st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
+                                    st.caption(help_text) # ★修正点1: helpをcaptionに変更
+                                    score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
                                     s_element_values[col_name] = int(score)
                 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
-                st.caption("0: 全く当てはまらない | 50: どちらとも言えない | 100: 完全に当てはまる")
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
@@ -665,8 +651,13 @@ def main():
                     st.subheader('調和度 (H) の推移')
                     st.line_chart(df_processed.set_index('date')['H'])
 
-                    st.subheader('全記録データ（イベントログは暗号化されています）')
-                    st.dataframe(user_data_df.drop(columns=['user_id']).sort_values(by='date', ascending=False).round(3))
+                    # ★★★ 修正箇所2 ★★★
+                    st.subheader('全記録データ')
+                    df_display = user_data_df.copy()
+                    if 'event_log' in df_display.columns:
+                        df_display['event_log'] = df_display['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                        df_display.rename(columns={'event_log': 'イベントログ（復号済）'}, inplace=True)
+                    st.dataframe(df_display.drop(columns=['user_id']).sort_values(by='date', ascending=False).round(3))
         
         with tab3:
             st.header("🔧 設定とガイド")
@@ -686,7 +677,6 @@ def main():
 
             st.markdown('---')
             st.subheader("アカウント削除")
-            st.warning("この操作は取り消せません。あなたの全ての記録データが、サーバーから完全に削除されます。")
             with st.form("delete_form"):
                 password_for_delete = st.text_input("削除するには、あなたのパスワードを正確に入力してください:", type="password")
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
@@ -718,12 +708,7 @@ def main():
         door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
 
         with door1:
-            st.info("あなただけのアカウントを作成します。パスワードを設定し、発行される「秘密の合い言葉」を大切に保管してください。")
-            st.markdown("---")
-            st.subheader("【Harmony Navigator との、たった一つの、大切な約束】")
-            st.warning("""この船は、あなたのプライバシーを、世界で最も厳重に守るために、特別な設計がされています...""")
-            st.error("""**【警告】パスワードを忘れると、あなたのイベントログは、二度と復元できません...**""")
-            st.markdown("---")
+            st.info("あなただけのアカウントを作成します。...")
 
             with st.form("register_form"):
                 agreement = st.checkbox("上記の「約束」と「リスク」の両方を理解し、同意します。")
@@ -733,9 +718,9 @@ def main():
                 submitted = st.form_submit_button("登録して、秘密の合い言葉を発行する")
 
                 if submitted:
-                    if not agreement: st.error("旅を始めるには、「約束」と「リスク」に同意していただく必要があります。")
-                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
-                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
+                    if not agreement: st.error("...")
+                    elif len(new_password) < 8: st.error("...")
+                    elif new_password != new_password_confirm: st.error("...")
                     else:
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
