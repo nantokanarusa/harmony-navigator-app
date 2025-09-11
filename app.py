@@ -1,4 +1,4 @@
-# app.py (v7.0.1 - The True Phoenix / The Absolute Final Code)
+# app.py (v7.0.2 - The Ultimate UX Polish / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -41,7 +41,6 @@ LONG_ELEMENTS = {
 ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for e in d])
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
-SLIDER_HELP_TEXT = "0: 全く当てはまらない | 25: あまり当てはまらない | 50: どちらとも言えない | 75: やや当てはまる | 100: 完全に当てはまる"
 
 # UIに表示するテキスト
 ELEMENT_DEFINITIONS = {
@@ -295,8 +294,8 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
 def get_gspread_client():
     try:
         scopes = [
-            "https.www.googleapis.com/auth/spreadsheets",
-            "https.www.googleapis.com/auth/drive"
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
         ]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         return gspread.authorize(creds)
