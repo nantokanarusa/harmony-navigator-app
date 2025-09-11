@@ -1,20 +1,22 @@
-# app.py (v6.0.2 - The Final Stable Build)
+# app.py (v7.0.0 - The Synthesis / The Absolute Final Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
 from scipy.spatial.distance import jensenshannon
 from datetime import datetime, date, timedelta
+import re
+import hashlib
 import time
 import uuid
 import itertools
 import bcrypt
 import base64
-from streamlit_gsheets import GSheetsConnection
+import gspread
+from google.oauth2.service_account import Credentials
 
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator")
-
-# ドメインとエレメントの定義
+# (全ての定数を、省略せず、完全に記述)
 DOMAINS = ['health', 'relationships', 'meaning', 'autonomy', 'finance', 'leisure', 'competition']
 DOMAIN_NAMES_JP = {
     'health': '1. 健康', 'relationships': '2. 人間関係', 'meaning': '3. 意味・貢献',
@@ -287,45 +289,79 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
 
-# --- D. データ永続化層 (st-gsheets-connection) ---
-conn = st.connection("gsheets", type=GSheetsConnection)
+# --- D. データ永続化層 (Direct gspread) ---
+@st.cache_resource(ttl=3600)
+def get_gspread_client():
+    try:
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+        return gspread.authorize(creds)
+    except Exception as e:
+        st.error("Google Sheetsへの認証に失敗しました。Secretsの設定とGCPのAPI設定を確認してください。")
+        st.exception(e)
+        return None
 
 @st.cache_data(ttl=10)
-def read_data(sheet_name: str):
+def read_data(sheet_name: str, spreadsheet_id: str):
+    gc = get_gspread_client()
+    if gc is None:
+        return pd.DataFrame()
     try:
+        sh = gc.open_by_key(spreadsheet_id)
         if sheet_name == 'users':
-            df = conn.read(worksheet="users")
+            worksheet = sh.worksheet("users")
         elif sheet_name == 'data':
-            df = conn.read(worksheet="data")
+            worksheet = sh.worksheet("data")
         else:
             return pd.DataFrame()
-
+        
+        df = pd.DataFrame(worksheet.get_all_records())
         if not df.empty:
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-            
             numeric_cols = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness']
             for col in numeric_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
         return df
+    except gspread.exceptions.SpreadsheetNotFound:
+        st.error(f"スプレッドシート（ID: {spreadsheet_id}）が見つかりません。")
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"スプレッドシート内に '{sheet_name}' という名前のワークシートが見つかりません。")
     except Exception as e:
-        st.error(f"データの読み込みに失敗しました: {e}")
-        return pd.DataFrame()
+        st.error(f"データの読み込み中に予期せぬエラーが発生しました。")
+        st.exception(e)
+    return pd.DataFrame()
 
-def write_data(sheet_name: str, df: pd.DataFrame):
-    df_copy = df.copy()
-    if 'date' in df_copy.columns:
-        df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
-    
+def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame):
+    gc = get_gspread_client()
+    if gc is None:
+        st.error("データベースクライアントが初期化されておらず、書き込みできません。")
+        return
     try:
+        sh = gc.open_by_key(spreadsheet_id)
         if sheet_name == 'users':
-            conn.write(worksheet="users", data=df_copy)
+            worksheet = sh.worksheet("users")
         elif sheet_name == 'data':
-            conn.write(worksheet="data", data=df_copy)
+            worksheet = sh.worksheet("data")
+        else:
+            return
+            
+        df_copy = df.copy()
+        if 'date' in df_copy.columns:
+            df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
+        
+        df_copy = df_copy.astype(str).replace('nan', '')
+        
+        worksheet.clear()
+        worksheet.update([df_copy.columns.values.tolist()] + df_copy.values.tolist())
         st.cache_data.clear()
     except Exception as e:
-        st.error(f"データの書き込み中にエラーが発生しました: {e}")
+        st.error(f"データの書き込み中にエラーが発生しました。")
+        st.exception(e)
 
 # --- E. UIコンポーネント ---
 def show_welcome_and_guide():
@@ -403,7 +439,21 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v6.0.2 - The Final Stable Build')
+    st.caption('v5.0.2 - The Unchained Phoenix')
+
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    # ★ 最初に、全ての調理道具を、完璧に準備する！ ★
+    # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+    gspread_client = get_gspread_client()
+    if gspread_client is None:
+        st.stop()
+
+    try:
+        users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
+        data_sheet_id = st.secrets["connections"]["gsheets"]["data_sheet_id"]
+    except KeyError:
+        st.error("SecretsにスプレッドシートID (`users_sheet_id`, `data_sheet_id`) が設定されていません。")
+        st.stop()
 
     # セッション状態の初期化
     if 'auth_status' not in st.session_state:
@@ -441,7 +491,7 @@ def main():
             submitted = st.form_submit_button("ロックを解除する")
 
             if submitted:
-                users_df = read_data('users')
+                users_df = read_data(gspread_client, 'users', users_sheet_id)
                 user_record = users_df[users_df['user_id'] == st.session_state.user_id]
                 if not user_record.empty and EncryptionManager.check_password(password_for_decrypt, user_record.iloc[0]['password_hash']):
                     st.session_state.enc_manager = EncryptionManager(password_for_decrypt)
@@ -455,7 +505,7 @@ def main():
     elif st.session_state.auth_status == "LOGGED_IN_UNLOCKED":
         user_id = st.session_state.user_id
         
-        all_data_df = read_data('data')
+        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         else:
@@ -622,7 +672,7 @@ def main():
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
                     all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date']).reset_index(drop=True)
                     
-                    write_data('data', all_data_df_updated)
+                    write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
                     st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
                     st.balloons()
                     st.rerun()
@@ -707,14 +757,14 @@ def main():
                 delete_submitted = st.form_submit_button("このアカウントと全データを完全に削除する")
 
                 if delete_submitted:
-                    users_df = read_data('users')
+                    users_df = read_data(gspread_client, 'users', users_sheet_id)
                     user_record = users_df[users_df['user_id'] == user_id]
                     if not user_record.empty and EncryptionManager.check_password(password_for_delete, user_record.iloc[0]['password_hash']):
                         users_df_updated = users_df[users_df['user_id'] != user_id]
-                        write_data('users', users_df_updated)
+                        write_data(gspread_client, 'users', users_sheet_id, users_df_updated)
                         
                         all_data_df_updated = all_data_df[all_data_df['user_id'] != user_id]
-                        write_data('data', all_data_df_updated)
+                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
                         
                         for key in list(st.session_state.keys()):
                             del st.session_state[key]
@@ -766,19 +816,19 @@ def main():
                         new_user_id = f"user_{uuid.uuid4().hex[:12]}"
                         hashed_pw = EncryptionManager.hash_password(new_password)
                         
-                        users_df = read_data('users')
+                        users_df = read_data(gspread_client, 'users', users_sheet_id)
                         new_user_df = pd.DataFrame([{'user_id': new_user_id, 'password_hash': hashed_pw}])
                         updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
-                        write_data('users', updated_users_df)
+                        write_data(gspread_client, 'users', users_sheet_id, updated_users_df)
                         
-                        all_data_df = read_data('data')
+                        all_data_df = read_data(gspread_client, 'data', data_sheet_id)
                         new_user_record = pd.DataFrame([{'user_id': new_user_id, 'date': date.today(), 'consent': consent}])
                         all_cols_in_order = ['user_id', 'date', 'mode', 'consent'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
                         for col in all_cols_in_order:
                              if col not in new_user_record.columns:
                                 new_user_record[col] = pd.NA
                         all_data_df_updated = pd.concat([all_data_df, new_user_record], ignore_index=True)
-                        write_data('data', all_data_df_updated)
+                        write_data(gspread_client, 'data', data_sheet_id, all_data_df_updated)
 
                         st.session_state.user_id = new_user_id
                         st.session_state.enc_manager = EncryptionManager(new_password)
@@ -794,7 +844,7 @@ def main():
 
                 if submitted:
                     if user_id_input and password_input:
-                        users_df = read_data('users')
+                        users_df = read_data(gspread_client, 'users', users_sheet_id)
                         if not users_df.empty:
                             user_record = users_df[users_df['user_id'] == user_id_input]
                             if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
