@@ -1,4 +1,4 @@
-# app.py (v7.0.10 - Absolutely Final & Complete Code)
+# app.py (v7.0.11 - Final Overwrite Logic Fix)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -392,7 +392,7 @@ def show_welcome_and_guide():
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.10 - Absolutely Final & Complete Code')
+    st.caption('v7.0.11 - Final Overwrite Logic Fix')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -596,7 +596,7 @@ def main():
                         new_df_row = pd.DataFrame([new_record])
                         
                         if not all_data_df.empty:
-                            condition = (all_data_df['user_id'] == user_id) & (pd.to_datetime(all_data_df['date']).dt.date == target_date)
+                            condition = (all_data_df['user_id'] == user_id) & (all_data_df['date'] == target_date)
                             all_data_df = all_data_df[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
@@ -661,7 +661,7 @@ def main():
                     if 'event_log' in df_display.columns:
                         df_display['event_log'] = df_display['event_log'].apply(st.session_state.enc_manager.decrypt_log)
                         df_display.rename(columns={'event_log': 'イベントログ（復号済）'}, inplace=True)
-                    st.dataframe(df_display.drop(columns=['user_id']).sort_values(by='date', ascending=False).round(3))
+                    st.dataframe(df_display.drop(columns=['user_id'], errors='ignore').sort_values(by='date', ascending=False).round(3))
         
         with tab3:
             st.header("🔧 設定とガイド")
