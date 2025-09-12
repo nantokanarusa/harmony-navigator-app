@@ -1,4 +1,4 @@
-# app.py (v7.0.58 - Advanced Dashboard Features Implemented & All Omissions Restored)
+# app.py (v7.0.59 - Final Complete Code with All Fixes & Refinements)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -805,7 +805,7 @@ def run_demographics_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.58 - Advanced Dashboard Features Implemented')
+    st.caption('v7.0.59 - Final Complete Code with All Fixes & Refinements')
     
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
