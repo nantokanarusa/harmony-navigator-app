@@ -736,6 +736,7 @@ def run_wizard_interface(container):
 
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
 
+                    # ★★★ TypeError バグ修正：並べ替えの前にデータ型を統一 ★★★
                     if 'date' in all_data_df_updated.columns:
                         all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
                     if 'record_timestamp' in all_data_df_updated.columns:
@@ -1107,11 +1108,14 @@ def main():
                         
                         all_data_df_to_update = read_data('data', data_sheet_id)
                         if not all_data_df_to_update.empty:
-                            condition = (all_data_df_to_update['user_id'] == user_id) & (pd.to_datetime(all_data_df_to_update['date'], errors='coerce').dt.date == target_date)
+                            # 既存の記録を削除する前に、dateカラムをdatetime.dateに変換しておく
+                            all_data_df_to_update['date'] = pd.to_datetime(all_data_df_to_update['date'], errors='coerce').dt.date
+                            condition = (all_data_df_to_update['user_id'] == user_id) & (all_data_df_to_update['date'] == target_date)
                             all_data_df_to_update = all_data_df_to_update[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df_to_update, new_df_row], ignore_index=True)
                         
+                        # ★★★ TypeError バグ修正：並べ替えの前にデータ型を統一 ★★★
                         if 'date' in all_data_df_updated.columns:
                             all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
                         if 'record_timestamp' in all_data_df_updated.columns:
@@ -1151,7 +1155,7 @@ def main():
                     valid_periods = [p for p in period_options if len(df_processed.dropna(subset=['H'])) >= p]
                     default_index = len(valid_periods) - 1 if valid_periods else 0
                     selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
-                    df_period = df_processed.dropna(subset=['H']).tail(selected_period)
+                    df_period = df_processed.dropna(subset=['H', 'g_happiness']).tail(selected_period)
 
                     st.markdown("##### あなたのリスク許容度を設定")
                     col1, col2, col3 = st.columns(3)
@@ -1180,80 +1184,54 @@ def main():
 
                 if not df_processed.empty:
                     analyze_discrepancy(df_processed)
-                    st.subheader('調和度 (H) の推移')
-                    st.line_chart(df_processed.set_index('date')['H'])
-
-                    st.subheader("🔎 構造分析：あなたの価値観と経験")
-                    col_chart1, col_chart2 = st.columns(2)
                     
-                    with col_chart1:
-                        st.markdown("##### 価値観 vs 経験 レーダーチャート")
+                    st.markdown("---")
+                    st.header("🗺️ あなたの心の航海図")
+
+                    df_plot = df_period.set_index('date').copy()
+                    df_plot['H_scaled'] = df_plot['H'] * 100
+                    
+                    st.subheader("心の天気図：モデルの分析(H) vs あなたの直感(G)")
+                    
+                    fig_hg = go.Figure()
+                    fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析'))
+                    fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感'))
+                    st.plotly_chart(fig_hg, use_container_width=True)
+
+                    if len(df_plot) > 1:
+                        st.subheader("自己対話のヒント：あなたの「心のクセ」との対話")
+                        with st.expander("▼ このチャートの見方"):
+                            st.info("""
+                            このグラフは、あなたの**『直感的な実感(G)』**と、あなたの価値観に基づいてモデルが算出した**『論理的な分析結果(H)』**の差を示します。この『ズレ』は、どちらが正しいかを示すものではありません。\n
+                            - **平常範囲（薄い青色の帯）**: あなたの「いつもの心のクセ」の範囲です。この中に収まっているなら、自己認識は安定しています。\n
+                            - **プラスへの逸脱**: あなたの直感が、まだ言葉にできていないポジティブな何かを捉えているサインかもしれません。\n
+                            - **マイナスへの逸脱**: あなたの論理的な自己認識と、実際の心の状態の間に、何か見過ごしている要因があるサインかもしれません。\n
+                            **バンドを突き抜けた日**に何があったか、日記を振り返ってみると、深い自己発見のヒントが隠されている可能性があります。
+                            """)
                         
-                        latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
-                        avg_q = latest_q_values
-                        avg_s = df_period[S_COLS].mean().values
+                        df_plot['insight_gap'] = df_plot['g_happiness'] - df_plot['H_scaled']
+                        gap_mean = df_plot['insight_gap'].mean()
+                        gap_std = df_plot['insight_gap'].std()
+                        upper_band = gap_mean + 1.5 * gap_std
+                        lower_band = gap_mean - 1.5 * gap_std
+
+                        fig_gap = go.Figure()
+                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[upper_band]*len(df_plot), fill=None, mode='lines', line_color='rgba(0,176,246,0.2)', name='平常範囲の上限'))
+                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[lower_band]*len(df_plot), fill='tonexty', mode='lines', line_color='rgba(0,176,246,0.2)', name='平常範囲の下限'))
+                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[gap_mean]*len(df_plot), mode='lines', line=dict(dash='dash'), name='あなたの「心のクセ」(平均)'))
+                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=df_plot['insight_gap'], mode='lines+markers', name='日々のズレ (G-H)'))
                         
-                        s_achieved_ratio = avg_s / 100.0 
-                        s_plot = avg_q * s_achieved_ratio
+                        st.plotly_chart(fig_gap, use_container_width=True)
 
-                        fig = go.Figure()
-
-                        fig.add_trace(go.Scatterpolar(
-                              r=np.append(s_plot, s_plot[0]),
-                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
-                              fill='toself',
-                              name='あなたの経験 (現実の形)'
-                        ))
-                        fig.add_trace(go.Scatterpolar(
-                              r=np.append(avg_q, avg_q[0]),
-                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
-                              fill='none',
-                              name='あなたの価値観 (理想の形)'
-                        ))
-
-                        dynamic_range_max = max(40, int(avg_q.max()) + 10) if avg_q.any() and avg_q.max() > 0 else 40
-                        fig.update_layout(
-                          polar=dict(
-                            radialaxis=dict(
-                              visible=True,
-                              range=[0, dynamic_range_max]
-                            )),
-                          showlegend=True,
-                          legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01)
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-
-                    with col_chart2:
-                        st.markdown("##### 価値観-経験 ギャップ分析")
-                        st.caption("算出方法: ギャップ(%) = あなたの価値観の構成比 - あなたの経験の構成比")
-                        
-                        q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
-                        s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
-
-                        gap_data = pd.DataFrame({
-                            'domain': DOMAIN_NAMES_JP_VALUES,
-                            'gap': q_norm - s_norm
-                        }).sort_values('gap', ascending=False)
-                        
-                        fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h',
-                                     color='gap',
-                                     color_continuous_scale='RdBu',
-                                     color_continuous_midpoint=0,
-                                     labels={'gap':'ギャップ (%ポイント)', 'domain':'ドメイン'},
-                                     title="+: 価値観 > 経験 (課題), -: 経験 > 価値観 (強み)")
-                        fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
-                        st.plotly_chart(fig_bar, use_container_width=True)
-
-                    # --- レベル1 ダッシュボード機能追加 ---
                     st.markdown("---")
                     st.header("🔬 詳細分析：あなたの幸福のメカニズムを探る")
 
                     with st.container(border=True):
-                        st.subheader("相関ヒートマップ")
+                        st.subheader("相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
                         with st.expander("▼ このチャートの見方"):
                             st.info("""
-                            このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているか、その**隠れた「相乗効果」と「トレードオフ」**を可視化します。
-                            - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。
+                            このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているかを可視化します。\n
+                            - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。\n
                             - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。
                             """)
                         
@@ -1264,11 +1242,10 @@ def main():
                         st.plotly_chart(fig_heatmap, use_container_width=True)
 
                     with st.container(border=True):
-                        st.subheader("イベント影響度ランキング")
+                        st.subheader("イベント影響度ランキング：幸福の「源泉」と「ストレス源」")
                         with st.expander("▼ このランキングの見方"):
                             st.info("""
                             あなたの日記（イベントログ）からキーワードを抽出し、その言葉が記録された日の幸福度が、全体の平均と比べてどれだけ高かったか（または低かったか）をランキングします。
-                            **あなたにとっての「幸福の源泉」と「ストレスの源」**を特定する手がかりになります。
                             """)
                         
                         df_period_logs = df_period.copy()
@@ -1280,7 +1257,6 @@ def main():
                         df_period_logs['words'] = df_period_logs['event_log'].str.findall(r'[\wぁ-んァ-ン一-龥ー]+')
                         all_words = [word for sublist in df_period_logs['words'].dropna() for word in sublist]
                         
-                        # 単純な頻出単語ではなく、意味のあるキーワードを抽出する（ここでは頻度上位10件に限定）
                         common_words = [word for word, count in Counter(all_words).most_common(10) if len(word) > 1]
 
                         for word in common_words:
@@ -1295,18 +1271,18 @@ def main():
                             st.info("分析できる十分なイベントログがありません。日記を記録してみましょう！")
 
                     with st.container(border=True):
-                        st.subheader("「価値観と現実のズレ」の推移")
+                        st.subheader("「価値観と現実のズレ」の推移：あなたの航海術の上達度")
                         with st.expander("▼ このチャートの見方"):
                              st.info("""
-                            このグラフは、あなたの「理想（価値観）」と「現実（日々の経験）」の**ズレの大きさ (`1 - U`)** が、時間と共にどう変化したかを示します。
-                            線が**長期的に下降傾向**にあれば、あなたの人生が、より価値観と一致した、調和の取れた方向へ進んでいることを意味します。これは、あなたの**「航海術」の上達度**を示す指標です。
+                            このグラフは、あなたの「理想（価値観）」と「現実（日々の経験）」の**ズレの大きさ (`1 - U`)** が、時間と共にどう変化したかを示します。\n
+                            線が**長期的に下降傾向**にあれば、あなたの人生が、より価値観と一致した、調和の取れた方向へ進んでいることを意味します。
                             """)
                         
                         df_period['gap_U'] = 1 - df_period['U']
                         st.line_chart(df_period.set_index('date')['gap_U'])
 
-
-                    st.subheader('全記録データ')
+                    st.markdown("---")
+                    st.subheader('📖 全記録データ')
                     df_display = user_data_df.copy()
                     if 'event_log' in df_display.columns:
                         df_display['event_log'] = df_display['event_log'].apply(st.session_state.enc_manager.decrypt_log)
