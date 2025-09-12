@@ -1,4 +1,4 @@
-# app.py (v7.0.50 - All Bugs Fixed, Refined UX)
+# app.py (v7.0.51 - All Bugs Fixed, Refined UX, Robust Data Handling)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -42,7 +42,7 @@ Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 
 # バグ1修正：キャプションテキストを完全な表記に修正
-CAPTION_TEXT = "0: 全く当てはまらない | 25: あまり当てはまらない | 50: どちらとも言えない | 75: やや当てはまる | 100: 完全に当てはまる"
+CAPTION_TEXT = "0: 全く当てはまらない | 25: あまり.. | 50: どちらとも.. | 75: やや.. | 100: 完全に当てはまる"
 
 ELEMENT_DEFINITIONS = {
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。',
@@ -416,12 +416,21 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         # 新規バグ(.dt accessor)修正: dateカラムを安全に文字列に変換
         if 'date' in df_copy.columns:
+            # pd.to_datetimeで確実にdatetime-likeに変換してからstrftime
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
         # 新規バグ(.dt accessor)修正: record_timestampカラムを安全に文字列に変換
         if 'record_timestamp' in df_copy.columns:
             timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
-            df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
+            # is_datetime64_any_dtypeでdatetime-likeかを確認してから.dtアクセサを使用
+            if pd.api.types.is_datetime64_any_dtype(timestamps):
+                if timestamps.dt.tz is not None:
+                    timestamps = timestamps.dt.tz_convert(None) # タイムゾーン情報を除去
+                # NaTでない値のみをISO 8601形式の文字列に変換
+                df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
+            else: # datetime-likeに変換できなかった場合 (例: 全てがNaT)
+                 df_copy['record_timestamp'] = ''
+
 
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
@@ -438,7 +447,8 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
                 df_copy[col] = '' 
 
         df_to_write = df_copy[db_schema_cols]
-        df_to_write = df_to_write.astype(str).replace({'nan': '', 'NaT': '', '<NA>': ''})
+        # .astype(str)の前に、NoneやNaNを空文字列に置換しておくことで、エラーを回避
+        df_to_write = df_to_write.fillna('').astype(str)
         
         worksheet.clear()
         worksheet.update([df_to_write.columns.values.tolist()] + df_to_write.values.tolist(), value_input_option='USER_ENTERED')
@@ -652,7 +662,7 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
             st.info("古い記録にタイムスタンプを付与しています...")
             # JSTタイムゾーンで擬似タイムスタンプを生成
             # .dtアクセサはdatetime64[ns]型のSeriesにしか使えないので、Series全体に適用する
-            pseudo_timestamps = date_as_datetime[missing_timestamp_mask].dt.tz_localize(JST)
+            pseudo_timestamps = date_as_datetime[missing_timestamp_mask].apply(lambda x: pd.Timestamp(x, tz=JST) if pd.notna(x) else pd.NaT)
             df_migrated.loc[missing_timestamp_mask, 'record_timestamp'] = pseudo_timestamps
             made_changes = True
 
@@ -749,7 +759,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.50 - All Bugs Fixed, Refined UX')
+    st.caption('v7.0.51 - All Bugs Fixed, Refined UX, Robust Data Handling')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -875,10 +885,11 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         
-        if 'record_timestamp' not in user_data_df.columns:
+        # タイムスタンプでソートするためにdatetimeに変換
+        if 'record_timestamp' in user_data_df.columns:
+            user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['record_timestamp'], errors='coerce')
+        else: # 念のためのフォールバック
              user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['date'])
-        
-        user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['record_timestamp'], errors='coerce')
 
         q_data_rows = user_data_df.dropna(subset=Q_COLS, how='all')
         
@@ -1037,7 +1048,7 @@ def main():
                         
                         all_data_df_to_update = read_data('data', data_sheet_id)
                         if not all_data_df_to_update.empty:
-                            condition = (all_data_df_to_update['user_id'] == user_id) & (pd.to_datetime(all_data_df_to_update['date']).dt.date == target_date)
+                            condition = (all_data_df_to_update['user_id'] == user_id) & (pd.to_datetime(all_data_df_to_update['date'], errors='coerce').dt.date == target_date)
                             all_data_df_to_update = all_data_df_to_update[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df_to_update, new_df_row], ignore_index=True)
