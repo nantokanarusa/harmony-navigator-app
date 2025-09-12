@@ -1,4 +1,4 @@
-# app.py (v7.0.52 - Timestamp Bug Fixed, All Previous Fixes Integrated)
+# app.py (v7.0.53 - TypeError on Sort Fixed, All Previous Fixes Integrated)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -86,7 +86,7 @@ EXPANDER_TEXTS = {
     'q_t': """
         #### ▼ これは、何のために設定するの？
         これは、あなたの人生という航海で、**「どの宝島を目指すか」**を決める、最も重要な羅針盤です。あなたが「何を大切にしたいか」という**あなた自身の価値観（情報秩序）**を、数値で表現します。
-        この設定が、あなたの日々の経験を評価するための**個人的な『ものさし』**となります。この「ものさし」がなければ、自分の航海が順調なのか、航路から外れているのかを知ることはできません。
+        この設定が、あなたの日々の経験を評価するための**個人的な『ものし』**となります。この「ものさし」がなければ、自分の航海が順調なのか、航路から外れているのかを知ることはできません。
         （週に一度など、定期的に見直すのがおすすめです）
         """,
     's_t': """
@@ -418,15 +418,18 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         # タイムスタンプ消失バグ修正：書き込み前の型変換を堅牢化
         if 'date' in df_copy.columns:
+            # pd.to_datetimeで確実にdatetime-likeに変換してからstrftime
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
         if 'record_timestamp' in df_copy.columns:
             timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
+            # is_datetime64_any_dtypeでdatetime-likeかを確認してから.dtアクセサを使用
             if pd.api.types.is_datetime64_any_dtype(timestamps):
                 if timestamps.dt.tz is not None:
-                    timestamps = timestamps.dt.tz_convert(None) 
+                    timestamps = timestamps.dt.tz_convert(None) # タイムゾーン情報を除去
+                # NaTでない値のみをISO 8601形式の文字列に変換
                 df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
-            else:
+            else: # datetime-likeに変換できなかった場合 (例: 全てがNaT)
                  df_copy['record_timestamp'] = ''
 
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
@@ -444,6 +447,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
                 df_copy[col] = '' 
 
         df_to_write = df_copy[db_schema_cols]
+        # .astype(str)の前に、NoneやNaNを空文字列に置換しておくことで、エラーを回避
         df_to_write = df_to_write.fillna('').astype(str)
         
         worksheet.clear()
@@ -742,6 +746,13 @@ def run_wizard_interface(container):
                     new_df_row = pd.DataFrame([new_record])
 
                     all_data_df_updated = pd.concat([all_data_df, new_df_row], ignore_index=True)
+
+                    # ★★★ TypeError バグ修正：並べ替えの前にデータ型を統一 ★★★
+                    if 'date' in all_data_df_updated.columns:
+                        all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
+                    if 'record_timestamp' in all_data_df_updated.columns:
+                        all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce')
+                    
                     all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
 
                     if write_data('data', st.secrets["connections"]["gsheets"]["data_sheet_id"], all_data_df_updated):
@@ -755,7 +766,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.52 - Timestamp Bug Fixed, All Previous Fixes Integrated')
+    st.caption('v7.0.53 - TypeError on Sort Fixed, All Previous Fixes Integrated')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -1045,6 +1056,13 @@ def main():
                             all_data_df_to_update = all_data_df_to_update[~condition]
 
                         all_data_df_updated = pd.concat([all_data_df_to_update, new_df_row], ignore_index=True)
+                        
+                        # ★★★ TypeError バグ修正：並べ替えの前にデータ型を統一 ★★★
+                        if 'date' in all_data_df_updated.columns:
+                            all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
+                        if 'record_timestamp' in all_data_df_updated.columns:
+                            all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce')
+
                         all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
                         
                         if write_data('data', data_sheet_id, all_data_df_updated):
