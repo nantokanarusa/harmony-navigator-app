@@ -41,6 +41,9 @@ ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for 
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 
+# バグ1修正：キャプションテキストを定数として定義
+CAPTION_TEXT = "0:全く.. | 25:あまり.. | 50:どちらとも.. | 75:やや.. | 100:完全に当てはまる"
+
 ELEMENT_DEFINITIONS = {
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。',
     '食事': '栄養バランスの取れた、美味しい食事に満足できた度合い。',
@@ -413,9 +416,16 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
+        # バグ4修正: 'DatetimeProperties' object has no attribute 'isoformat' エラーの修正
         if 'record_timestamp' in df_copy.columns:
-            df_copy['record_timestamp'] = pd.to_datetime(df_copy['record_timestamp'], errors='coerce').dt.tz_localize(None).dt.isoformat()
-        
+            # 1. pd.to_datetimeで確実にdatetimeオブジェクトに変換
+            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
+            # 2. タイムゾーン情報がある場合は除去（tz_localize(None)の安全な代替）
+            if timestamps.dt.tz is not None:
+                timestamps = timestamps.dt.tz_convert(None)
+            # 3. NaTでない値のみをISO 8601形式の文字列に変換
+            df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
+
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
             element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
@@ -613,12 +623,18 @@ def get_safe_index(options, value):
     except (ValueError, TypeError):
         return 0
 
+# バグ2修正：データ移行とスキーマ保証のための新関数
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
+    """
+    ユーザーデータを読み込み、最新のスキーマに準拠しているか確認・修正する。
+    修正があった場合は、データベースに書き戻して永続化する。
+    """
     EXPECTED_COLUMNS = ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
     df_migrated = df.copy()
     made_changes = False
     
+    # 1. 期待されるカラムが存在するか確認し、なければ追加
     missing_cols = [col for col in EXPECTED_COLUMNS if col not in df_migrated.columns]
     if missing_cols:
         st.info("古いデータ形式を検出しました。スキーマを更新します...")
@@ -626,18 +642,22 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
             df_migrated[col] = pd.NA
         made_changes = True
 
+    # 2. record_timestampが空の行を検出し、dateから擬似的に生成
     if 'record_timestamp' in df_migrated.columns:
         df_migrated['record_timestamp'] = pd.to_datetime(df_migrated['record_timestamp'], errors='coerce')
         missing_timestamp_mask = df_migrated['record_timestamp'].isna()
         if missing_timestamp_mask.any():
             st.info("古い記録にタイムスタンプを付与しています...")
-            pseudo_timestamps = pd.to_datetime(df_migrated.loc[missing_timestamp_mask, 'date']) + timedelta(hours=12)
+            # JSTタイムゾーンで擬似タイムスタンプを生成
+            pseudo_timestamps = pd.to_datetime(df_migrated.loc[missing_timestamp_mask, 'date']).dt.tz_localize(JST)
             df_migrated.loc[missing_timestamp_mask, 'record_timestamp'] = pseudo_timestamps
             made_changes = True
 
+    # 3. 変更があった場合のみ、データベースに書き戻す
     if made_changes:
         st.info("データベースを最新の形式に更新しています...")
         try:
+            # 他のユーザーのデータを壊さないように、全データを読み込み、該当ユーザーのデータのみを差し替える
             all_data_df = read_data('data', sheet_id)
             if not all_data_df.empty:
                 other_users_data = all_data_df[all_data_df['user_id'] != user_id]
@@ -647,14 +667,17 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 
             if write_data('data', sheet_id, all_data_df_updated):
                 st.success("データ形式の更新が完了し、永続的に保存しました。")
+                # 更新後のデータを返す
                 return df_migrated
             else:
                 st.error("スキーマ更新の保存に失敗しました。")
         except Exception as e:
             st.warning(f"スキーマ更新の保存中にエラーが発生しました: {e}")
     
+    # スキーマの順序を整えて返す
     final_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns] + [c for c in df_migrated.columns if c not in EXPECTED_COLUMNS]
     return df_migrated[final_order]
+
 
 def run_wizard_interface(container):
     """価値観発見ウィザードのUIをレンダリングする再利用可能な関数"""
@@ -721,7 +744,7 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
-if __name__ == '__main__':
+def main():
     st.title('🧭 Harmony Navigator')
     st.caption('v7.0.49 - Refactored & Truly Complete Code')
 
@@ -743,93 +766,94 @@ if __name__ == '__main__':
 
     auth_status = st.session_state.auth_status
 
-    if auth_status == "NOT_LOGGED_IN":
-        show_welcome_and_guide()
-        st.subheader("あなたの旅を、ここから始めましょう")
-        show_legal_documents()
-        door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
-        with door1:
-            with st.form("register_form"):
-                agreement = st.checkbox("上記の利用規約とプライバシーポリシーに同意します。")
-                new_password = st.text_input("パスワード（8文字以上）", type="password")
-                new_password_confirm = st.text_input("パスワード（確認用）", type="password")
-                consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
-                submitted = st.form_submit_button("同意して登録し、秘密の合い言葉を発行する")
-                if submitted:
-                    if not agreement: st.error("旅を始めるには、利用規約とプライバシーポリシーに同意していただく必要があります。")
-                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
-                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
-                    else:
-                        new_user_id = f"user_{uuid.uuid4().hex[:12]}"
-                        hashed_pw = EncryptionManager.hash_password(new_password)
-                        
-                        users_df = read_data('users', users_sheet_id)
-                        
-                        new_user_data = {
-                            'user_id': new_user_id,
-                            'password_hash': hashed_pw,
-                            'consent': consent
-                        }
-                        for key in DEMOGRAPHIC_OPTIONS.keys():
-                            new_user_data[key] = '未選択'
-
-                        new_user_df = pd.DataFrame([new_user_data])
-                        updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
-                        if write_data('users', users_sheet_id, updated_users_df):
-                            st.session_state.user_id = new_user_id
-                            st.session_state.enc_manager = EncryptionManager(new_password)
-                            st.session_state.auth_status = "AWAITING_ID"
-                            st.rerun()
-
-        with door2:
-            with st.form("login_form"):
-                user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
-                password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
-                submitted = st.form_submit_button("乗船する")
-                if submitted:
-                    if user_id_input and password_input:
-                        users_df = read_data('users', users_sheet_id)
-                        if not users_df.empty:
-                            user_record = users_df[users_df['user_id'] == user_id_input]
-                            if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
-                                st.session_state.user_id = user_id_input
-                                st.session_state.enc_manager = EncryptionManager(password_input)
-                                st.session_state.auth_status = "CHECKING_USER_DATA"
-                                st.success("乗船に成功しました！データを読み込んでいます...")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error("合い言葉またはパスワードが間違っています。")
+    if auth_status in ["NOT_LOGGED_IN", "AWAITING_ID", "AWAITING_WIZARD"]:
+        if auth_status == "AWAITING_ID":
+            st.header("【あなたの船が、完成しました】")
+            st.success("ようこそ、航海士へ。")
+            st.warning(f"""
+                **⚠️【必ず、今すぐ、安全な場所に記録してください】**\n
+                これが、あなたの船に戻るための、世界でたった一つの、あなただけの**『秘密の合い言葉』**です。\n
+                この合い言葉は、**二度と表示されません。** もし失くしてしまうと、あなたの航海日誌は、永遠に失われます。
+                """)
+            st.code(st.session_state.user_id)
+            st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
+            if st.button("はい、安全に保管しました。旅を始める"):
+                st.session_state.auth_status = "AWAITING_WIZARD"
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
+                st.rerun()
+        elif auth_status == "AWAITING_WIZARD":
+            run_wizard_interface(st.container())
+        else: # NOT_LOGGED_IN
+            show_welcome_and_guide()
+            st.subheader("あなたの旅を、ここから始めましょう")
+            show_legal_documents()
+            door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
+            with door1:
+                with st.form("register_form"):
+                    agreement = st.checkbox("上記の利用規約とプライバシーポリシーに同意します。")
+                    new_password = st.text_input("パスワード（8文字以上）", type="password")
+                    new_password_confirm = st.text_input("パスワード（確認用）", type="password")
+                    consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
+                    submitted = st.form_submit_button("同意して登録し、秘密の合い言葉を発行する")
+                    if submitted:
+                        if not agreement: st.error("旅を始めるには、利用規約とプライバシーポリシーに同意していただく必要があります。")
+                        elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                        elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
                         else:
-                            st.error("その合い言葉を持つ船は見つかりませんでした。")
-                    else:
-                        st.warning("合い言葉とパスワードの両方を入力してください。")
+                            new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+                            hashed_pw = EncryptionManager.hash_password(new_password)
+                            
+                            users_df = read_data('users', users_sheet_id)
+                            
+                            new_user_data = {
+                                'user_id': new_user_id,
+                                'password_hash': hashed_pw,
+                                'consent': consent
+                            }
+                            for key in DEMOGRAPHIC_OPTIONS.keys():
+                                new_user_data[key] = '未選択'
 
-    elif auth_status == "AWAITING_ID":
-        st.header("【あなたの船が、完成しました】")
-        st.success("ようこそ、航海士へ。")
-        st.warning(f"""
-            **⚠️【必ず、今すぐ、安全な場所に記録してください】**\n
-            これが、あなたの船に戻るための、世界でたった一つの、あなただけの**『秘密の合い言葉』**です。\n
-            この合い言葉は、**二度と表示されません。** もし失くしてしまうと、あなたの航海日誌は、永遠に失われます。
-            """)
-        st.code(st.session_state.user_id)
-        st.info("上記の合い言葉をコピーし、あなただけが知る、最も安全な場所に、大切に保管してください。")
-        if st.button("はい、安全に保管しました。旅を始める"):
-            st.session_state.auth_status = "AWAITING_WIZARD"
-            st.session_state.q_wizard_step = 1
-            st.session_state.q_comparisons = {}
-            st.rerun()
-    
-    elif auth_status == "AWAITING_WIZARD":
-        run_wizard_interface(st.container())
+                            new_user_df = pd.DataFrame([new_user_data])
+                            updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
+                            if write_data('users', users_sheet_id, updated_users_df):
+                                st.session_state.user_id = new_user_id
+                                st.session_state.enc_manager = EncryptionManager(new_password)
+                                st.session_state.auth_status = "AWAITING_ID"
+                                st.rerun()
+
+            with door2:
+                with st.form("login_form"):
+                    user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
+                    password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
+                    submitted = st.form_submit_button("乗船する")
+                    if submitted:
+                        if user_id_input and password_input:
+                            users_df = read_data('users', users_sheet_id)
+                            if not users_df.empty:
+                                user_record = users_df[users_df['user_id'] == user_id_input]
+                                if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
+                                    st.session_state.user_id = user_id_input
+                                    st.session_state.enc_manager = EncryptionManager(password_input)
+                                    st.session_state.auth_status = "CHECKING_USER_DATA"
+                                    st.success("乗船に成功しました！データを読み込んでいます...")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("合い言葉またはパスワードが間違っています。")
+                            else:
+                                st.error("その合い言葉を持つ船は見つかりませんでした。")
+                        else:
+                            st.warning("合い言葉とパスワードの両方を入力してください。")
 
     elif auth_status == "CHECKING_USER_DATA":
         user_id = st.session_state.user_id
         all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+            # バグ2修正：ここでスキーマ移行を実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
+            
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
             if not has_q_data:
                 st.session_state.auth_status = "AWAITING_WIZARD"
@@ -904,7 +928,7 @@ if __name__ == '__main__':
             target_date = st.date_input("記録する日付:", value=today, min_value=today - timedelta(days=365), max_value=today, label_visibility="collapsed")
             
             is_already_recorded = False
-            if not user_data_df.empty:
+            if not user_data_df.empty and 'date' in user_data_df.columns:
                 date_match = user_data_df[user_data_df['date'] == target_date]
                 if not date_match.empty and pd.notna(date_match.iloc[0].get('g_happiness')):
                     is_already_recorded = True
@@ -918,8 +942,6 @@ if __name__ == '__main__':
             with st.form(key='daily_input_form'):
                 s_element_values = {}
                 s_domain_values = {}
-                
-                caption_text = "0:全く当てはまらない | 25:あまり.. | 50:どちらとも.. | 75:やや.. | 100:完全に当てはまる"
 
                 if 'クイック' in input_mode:
                     mode_string = 'quick'
@@ -930,8 +952,7 @@ if __name__ == '__main__':
                             for element in LONG_ELEMENTS[domain]:
                                 st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
                         s_domain_values['s_' + domain] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=50, key=f"s_{domain}", label_visibility="collapsed")
-                        st.caption(caption_text)
-
+                        st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
                 else:
                     mode_string = 'deep'
                     col1, col2 = st.columns(2)
@@ -953,13 +974,13 @@ if __name__ == '__main__':
                                     st.markdown(f"**{element}**")
                                     st.caption(ELEMENT_DEFINITIONS.get(element, ""))
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
-                                    st.caption(caption_text)
+                                    st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
                                     s_element_values[col_name] = int(score)
 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
-                st.caption(caption_text)
+                st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
@@ -1132,6 +1153,7 @@ if __name__ == '__main__':
         with tab3:
             st.header("🔧 設定とガイド")
             
+            # バグ3修正：ウィザードへのアクセスをここに常設
             st.subheader("価値観の再発見")
             st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
             if st.button("価値観発見ウィザードを始める"):
@@ -1220,65 +1242,5 @@ if __name__ == '__main__':
             st.subheader("このアプリについて")
             show_welcome_and_guide()
         
-    else: # NOT_LOGGED_IN
-        show_welcome_and_guide()
-        st.subheader("あなたの旅を、ここから始めましょう")
-        show_legal_documents()
-        door1, door2 = st.tabs(["**新しい船で旅を始める (初めての方)**", "**秘密の合い言葉で乗船する (2回目以降の方)**"])
-
-        with door1:
-            with st.form("register_form"):
-                agreement = st.checkbox("上記の利用規約とプライバシーポリシーに同意します。")
-                new_password = st.text_input("パスワード（8文字以上）", type="password")
-                new_password_confirm = st.text_input("パスワード（確認用）", type="password")
-                consent = st.checkbox("研究協力に関する説明を読み、その内容に同意します。")
-                submitted = st.form_submit_button("同意して登録し、秘密の合い言葉を発行する")
-                if submitted:
-                    if not agreement: st.error("旅を始めるには、利用規約とプライバシーポリシーに同意していただく必要があります。")
-                    elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
-                    elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
-                    else:
-                        new_user_id = f"user_{uuid.uuid4().hex[:12]}"
-                        hashed_pw = EncryptionManager.hash_password(new_password)
-                        
-                        users_df = read_data('users', users_sheet_id)
-                        
-                        new_user_data = {
-                            'user_id': new_user_id,
-                            'password_hash': hashed_pw,
-                            'consent': consent
-                        }
-                        for key in DEMOGRAPHIC_OPTIONS.keys():
-                            new_user_data[key] = '未選択'
-
-                        new_user_df = pd.DataFrame([new_user_data])
-                        updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
-                        if write_data('users', users_sheet_id, updated_users_df):
-                            st.session_state.user_id = new_user_id
-                            st.session_state.enc_manager = EncryptionManager(new_password)
-                            st.session_state.auth_status = "AWAITING_ID"
-                            st.rerun()
-
-        with door2:
-            with st.form("login_form"):
-                user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」を入力してください")
-                password_input = st.text_input("あなたの「パスワード」を入力してください", type="password")
-                submitted = st.form_submit_button("乗船する")
-                if submitted:
-                    if user_id_input and password_input:
-                        users_df = read_data('users', users_sheet_id)
-                        if not users_df.empty:
-                            user_record = users_df[users_df['user_id'] == user_id_input]
-                            if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
-                                st.session_state.user_id = user_id_input
-                                st.session_state.enc_manager = EncryptionManager(password_input)
-                                st.session_state.auth_status = "CHECKING_USER_DATA"
-                                st.success("乗船に成功しました！データを読み込んでいます...")
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error("合い言葉またはパスワードが間違っています。")
-                        else:
-                            st.error("その合い言葉を持つ船は見つかりませんでした。")
-                    else:
-                        st.warning("合い言葉とパスワードの両方を入力してください。")
+if __name__ == '__main__':
+    main()
