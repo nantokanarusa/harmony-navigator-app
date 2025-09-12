@@ -1,4 +1,4 @@
-# app.py (v7.0.48 - Final Complete Code without Omissions)
+# app.py (v7.0.49 - Refactored & Truly Complete Code)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -723,7 +723,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 if __name__ == '__main__':
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.48 - Final Complete Code without Omissions')
+    st.caption('v7.0.49 - Refactored & Truly Complete Code')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
