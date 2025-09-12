@@ -837,6 +837,32 @@ def inject_custom_css():
                 border-radius: 8px;
             }
 
+            /* --- ★★★ ここからが新しい修正 ★★★ --- */
+            /* st.info (青色の網掛け) のスタイルを上書き */
+            [data-testid="stInfo"] {
+                background-color: #e9ecef; /* 薄いグレー */
+                border: 1px solid #ced4da;
+                border-radius: 10px;
+                color: #495057; /* 少し濃いグレーの文字 */
+            }
+            /* st.info内のアイコンの色も調整 */
+            [data-testid="stInfo"] .st-emotion-cache-1pxazr8 {
+                color: #495057;
+            }
+
+            /* st.success (緑色の網掛け) のスタイルを上書き */
+            [data-testid="stSuccess"] {
+                background-color: #dee2e6; /* 少し濃いグレー */
+                border: 1px solid #adb5bd;
+                border-radius: 10px;
+                color: #343a40; /* 濃いグレーの文字 */
+            }
+            /* st.success内のアイコンの色も調整 */
+            [data-testid="stSuccess"] .st-emotion-cache-1pxazr8 {
+                color: #343a40;
+            }
+            /* --- ★★★ ここまでが新しい修正 ★★★ --- */
+
         </style>
         """,
         unsafe_allow_html=True,
