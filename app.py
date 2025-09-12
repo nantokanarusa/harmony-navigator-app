@@ -838,28 +838,35 @@ def inject_custom_css():
             }
 
             /* --- ★★★ ここからが新しい修正 ★★★ --- */
-            /* st.info (青色の網掛け) のスタイルを上書き */
-            [data-testid="stInfo"] {
-                background-color: #e9ecef; /* 薄いグレー */
-                border: 1px solid #ced4da;
-                border-radius: 10px;
-                color: #495057; /* 少し濃いグレーの文字 */
+            
+            /* st.info (青色の網掛け) のスタイルを強制的に上書き */
+            div[data-testid="stAlert"][data-alert-type="info"] {
+                background-color: #e9ecef !important; /* 薄いグレー */
+                border: 1px solid #ced4da !important;
+                border-radius: 10px !important;
             }
-            /* st.info内のアイコンの色も調整 */
-            [data-testid="stInfo"] .st-emotion-cache-1pxazr8 {
-                color: #495057;
+            /* st.info内のテキストの色 */
+            div[data-testid="stAlert"][data-alert-type="info"] .st-emotion-cache-1wivap2 {
+                color: #495057 !important; /* 少し濃いグレーの文字 */
+            }
+            /* st.info内のアイコンの色 */
+            div[data-testid="stAlert"][data-alert-type="info"] svg {
+                fill: #495057 !important;
             }
 
-            /* st.success (緑色の網掛け) のスタイルを上書き */
-            [data-testid="stSuccess"] {
-                background-color: #dee2e6; /* 少し濃いグレー */
-                border: 1px solid #adb5bd;
-                border-radius: 10px;
-                color: #343a40; /* 濃いグレーの文字 */
+            /* st.success (緑色の網掛け) のスタイルを強制的に上書き */
+            div[data-testid="stAlert"][data-alert-type="success"] {
+                background-color: #dee2e6 !important; /* 少し濃いグレー */
+                border: 1px solid #adb5bd !important;
+                border-radius: 10px !important;
             }
-            /* st.success内のアイコンの色も調整 */
-            [data-testid="stSuccess"] .st-emotion-cache-1pxazr8 {
-                color: #343a40;
+            /* st.success内のテキストの色 */
+            div[data-testid="stAlert"][data-alert-type="success"] .st-emotion-cache-1wivap2 {
+                color: #343a40 !important; /* 濃いグレーの文字 */
+            }
+            /* st.success内のアイコンの色 */
+            div[data-testid="stAlert"][data-alert-type="success"] svg {
+                fill: #343a40 !important;
             }
             /* --- ★★★ ここまでが新しい修正 ★★★ --- */
 
