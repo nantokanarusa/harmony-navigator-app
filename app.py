@@ -1415,42 +1415,42 @@ def main():
             with st.container(border=True):
                 st.subheader("👤 プロフィール情報（研究協力用）")
                 with st.form("profile_form"):
-                users_df_for_profile = read_data('users', users_sheet_id)
-                user_info = users_df_for_profile[users_df_for_profile['user_id'] == user_id]
-                current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
-                
-                # 全てのプロフィール項目を追加
-                age_group = st.selectbox("年代", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group')))
-                gender = st.selectbox("性別", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender')))
-                occupation_category = st.selectbox("職業", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category')))
-                income_range = st.selectbox("年収", options=DEMOGRAPHIC_OPTIONS['income_range'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range')))
-                marital_status = st.selectbox("婚姻状況", options=DEMOGRAPHIC_OPTIONS['marital_status'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status')))
-                has_children = st.selectbox("子供の有無", options=DEMOGRAPHIC_OPTIONS['has_children'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['has_children'], current_profile.get('has_children')))
-                living_situation = st.selectbox("居住形態", options=DEMOGRAPHIC_OPTIONS['living_situation'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['living_situation'], current_profile.get('living_situation')))
-                chronic_illness = st.selectbox("慢性疾患", options=DEMOGRAPHIC_OPTIONS['chronic_illness'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['chronic_illness'], current_profile.get('chronic_illness')))
-                country = st.selectbox("国", options=DEMOGRAPHIC_OPTIONS['country'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['country'], current_profile.get('country')))
-                
-                profile_submitted = st.form_submit_button("プロフィールを保存する", use_container_width=True)
-        
-                if profile_submitted:
-                    users_df_update = read_data('users', users_sheet_id)
-                    # 全てのプロフィール項目を更新
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'age_group'] = age_group
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'gender'] = gender
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'occupation_category'] = occupation_category
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'income_range'] = income_range
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'marital_status'] = marital_status
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'has_children'] = has_children
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'living_situation'] = living_situation
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'chronic_illness'] = chronic_illness
-                    users_df_update.loc[users_df_update['user_id'] == user_id, 'country'] = country
+                    users_df_for_profile = read_data('users', users_sheet_id)
+                    user_info = users_df_for_profile[users_df_for_profile['user_id'] == user_id]
+                    current_profile = user_info.iloc[0] if not user_info.empty else pd.Series()
                     
-                    if write_data('users', users_sheet_id, users_df_update):
-                        st.success("プロフィール情報を更新しました！")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("プロフィールの保存に失敗しました。")
+                    # 全てのプロフィール項目を追加
+                    age_group = st.selectbox("年代", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group')))
+                    gender = st.selectbox("性別", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender')))
+                    occupation_category = st.selectbox("職業", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category')))
+                    income_range = st.selectbox("年収", options=DEMOGRAPHIC_OPTIONS['income_range'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range')))
+                    marital_status = st.selectbox("婚姻状況", options=DEMOGRAPHIC_OPTIONS['marital_status'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status')))
+                    has_children = st.selectbox("子供の有無", options=DEMOGRAPHIC_OPTIONS['has_children'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['has_children'], current_profile.get('has_children')))
+                    living_situation = st.selectbox("居住形態", options=DEMOGRAPHIC_OPTIONS['living_situation'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['living_situation'], current_profile.get('living_situation')))
+                    chronic_illness = st.selectbox("慢性疾患", options=DEMOGRAPHIC_OPTIONS['chronic_illness'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['chronic_illness'], current_profile.get('chronic_illness')))
+                    country = st.selectbox("国", options=DEMOGRAPHIC_OPTIONS['country'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['country'], current_profile.get('country')))
+                    
+                    profile_submitted = st.form_submit_button("プロフィールを保存する", use_container_width=True)
+
+                    if profile_submitted:
+                        users_df_update = read_data('users', users_sheet_id)
+                        # 全てのプロフィール項目を更新
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'age_group'] = age_group
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'gender'] = gender
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'occupation_category'] = occupation_category
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'income_range'] = income_range
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'marital_status'] = marital_status
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'has_children'] = has_children
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'living_situation'] = living_situation
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'chronic_illness'] = chronic_illness
+                        users_df_update.loc[users_df_update['user_id'] == user_id, 'country'] = country
+                        
+                        if write_data('users', users_sheet_id, users_df_update):
+                            st.success("プロフィール情報を更新しました！")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("プロフィールの保存に失敗しました。")
 
             with st.container(border=True):
                 st.subheader("📥 データのエクスポート")
