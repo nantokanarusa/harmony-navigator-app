@@ -1224,6 +1224,43 @@ def main():
                         st.plotly_chart(fig_gap, use_container_width=True)
 
                     st.markdown("---")
+                    st.header("🔬 構造分析と詳細データ")
+                    
+                    st.subheader("あなたの価値観と経験")
+                    col_chart1, col_chart2 = st.columns(2)
+                    
+                    with col_chart1:
+                        st.markdown("##### 価値観 vs 経験 レーダーチャート")
+                        
+                        latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
+                        avg_q = latest_q_values
+                        avg_s = df_period[S_COLS].mean().values
+                        
+                        s_achieved_ratio = avg_s / 100.0 
+                        s_plot = avg_q * s_achieved_ratio
+
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatterpolar(r=np.append(s_plot, s_plot[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='toself', name='あなたの経験 (現実の形)'))
+                        fig.add_trace(go.Scatterpolar(r=np.append(avg_q, avg_q[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='none', name='あなたの価値観 (理想の形)'))
+
+                        dynamic_range_max = max(40, int(avg_q.max()) + 10) if avg_q.any() and avg_q.max() > 0 else 40
+                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    with col_chart2:
+                        st.markdown("##### 価値観-経験 ギャップ分析")
+                        st.caption("算出方法: ギャップ(%) = あなたの価値観の構成比 - あなたの経験の構成比")
+                        
+                        q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
+                        s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
+
+                        gap_data = pd.DataFrame({'domain': DOMAIN_NAMES_JP_VALUES, 'gap': q_norm - s_norm}).sort_values('gap', ascending=False)
+                        
+                        fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h', color='gap', color_continuous_scale='RdBu', color_continuous_midpoint=0, labels={'gap':'ギャップ (%ポイント)', 'domain':'ドメイン'}, title="+: 価値観 > 経験 (課題), -: 経験 > 価値観 (強み)")
+                        fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+                        st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                    st.markdown("---")
                     st.header("🔬 詳細分析：あなたの幸福のメカニズムを探る")
 
                     with st.container(border=True):
