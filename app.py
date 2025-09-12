@@ -1,4 +1,4 @@
-# app.py (v7.0.57 - UI/UX Refinements & All Omissions Restored)
+# app.py (v7.0.58 - Advanced Dashboard Features Implemented & All Omissions Restored)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,6 +16,7 @@ from google.oauth2.service_account import Credentials
 import plotly.graph_objects as go
 import plotly.express as px
 import pytz
+from collections import Counter
 
 # --- A. 定数と基本設定 ---
 st.set_page_config(layout="wide", page_title="Harmony Navigator", page_icon="🧭")
@@ -803,10 +804,8 @@ def run_demographics_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.57 - UI/UX Refinements Integrated')
-    # ... (この後のコードは前回の完全版と同じため、ここでは省略します)
-
-# (省略部分を全て復元)
+    st.caption('v7.0.58 - Advanced Dashboard Features Implemented')
+    
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
         data_sheet_id = st.secrets["connections"]["gsheets"]["data_sheet_id"]
@@ -971,6 +970,7 @@ def main():
         with st.sidebar:
             st.subheader("🧭 あなたの羅針盤")
             st.info("現在の価値観を見直したい場合は、いつでもここからガイドを開始できます。")
+            # 改善要望4: 「ウィザード」を「価値観発見ガイド」に変更
             if st.button("🗺️ 価値観発見ガイドを始める", use_container_width=True):
                 st.session_state.auth_status = "AWAITING_WIZARD"
                 st.session_state.q_wizard_step = 1
@@ -1243,6 +1243,68 @@ def main():
                                      title="+: 価値観 > 経験 (課題), -: 経験 > 価値観 (強み)")
                         fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
                         st.plotly_chart(fig_bar, use_container_width=True)
+
+                    # --- レベル1 ダッシュボード機能追加 ---
+                    st.markdown("---")
+                    st.header("🔬 詳細分析：あなたの幸福のメカニズムを探る")
+
+                    with st.container(border=True):
+                        st.subheader("相関ヒートマップ")
+                        with st.expander("▼ このチャートの見方"):
+                            st.info("""
+                            このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているか、その**隠れた「相乗効果」と「トレードオフ」**を可視化します。
+                            - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。
+                            - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。
+                            """)
+                        
+                        corr_df = df_period[S_COLS].corr()
+                        corr_df.columns = DOMAIN_NAMES_JP_VALUES
+                        corr_df.index = DOMAIN_NAMES_JP_VALUES
+                        fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
+                        st.plotly_chart(fig_heatmap, use_container_width=True)
+
+                    with st.container(border=True):
+                        st.subheader("イベント影響度ランキング")
+                        with st.expander("▼ このランキングの見方"):
+                            st.info("""
+                            あなたの日記（イベントログ）からキーワードを抽出し、その言葉が記録された日の幸福度が、全体の平均と比べてどれだけ高かったか（または低かったか）をランキングします。
+                            **あなたにとっての「幸福の源泉」と「ストレスの源」**を特定する手がかりになります。
+                            """)
+                        
+                        df_period_logs = df_period.copy()
+                        df_period_logs['event_log'] = df_period_logs['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                        
+                        word_impact = {}
+                        mean_h_total = df_period_logs['H'].mean()
+                        
+                        df_period_logs['words'] = df_period_logs['event_log'].str.findall(r'[\wぁ-んァ-ン一-龥ー]+')
+                        all_words = [word for sublist in df_period_logs['words'].dropna() for word in sublist]
+                        
+                        # 単純な頻出単語ではなく、意味のあるキーワードを抽出する（ここでは頻度上位10件に限定）
+                        common_words = [word for word, count in Counter(all_words).most_common(10) if len(word) > 1]
+
+                        for word in common_words:
+                            impact_days_h = df_period_logs[df_period_logs['event_log'].str.contains(word, na=False)]['H'].mean()
+                            impact = impact_days_h - mean_h_total
+                            word_impact[word] = impact
+
+                        if word_impact:
+                            impact_df = pd.DataFrame(list(word_impact.items()), columns=['キーワード', '幸福度へのインパクト']).sort_values('幸福度へのインパクト', ascending=False)
+                            st.dataframe(impact_df, use_container_width=True)
+                        else:
+                            st.info("分析できる十分なイベントログがありません。日記を記録してみましょう！")
+
+                    with st.container(border=True):
+                        st.subheader("「価値観と現実のズレ」の推移")
+                        with st.expander("▼ このチャートの見方"):
+                             st.info("""
+                            このグラフは、あなたの「理想（価値観）」と「現実（日々の経験）」の**ズレの大きさ (`1 - U`)** が、時間と共にどう変化したかを示します。
+                            線が**長期的に下降傾向**にあれば、あなたの人生が、より価値観と一致した、調和の取れた方向へ進んでいることを意味します。これは、あなたの**「航海術」の上達度**を示す指標です。
+                            """)
+                        
+                        df_period['gap_U'] = 1 - df_period['U']
+                        st.line_chart(df_period.set_index('date')['gap_U'])
+
 
                     st.subheader('全記録データ')
                     df_display = user_data_df.copy()
