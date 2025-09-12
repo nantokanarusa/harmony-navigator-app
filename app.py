@@ -1,4 +1,4 @@
-# app.py (v7.0.47 - Final Cache Invalidation Fix & Complete Code)
+# app.py (v7.0.48 - Final Complete Code without Omissions)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -616,40 +616,45 @@ def get_safe_index(options, value):
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
     EXPECTED_COLUMNS = ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
-    missing_cols = [col for col in EXPECTED_COLUMNS if col not in df.columns]
-
-    if not missing_cols:
-        final_order = [col for col in EXPECTED_COLUMNS if col in df.columns] + [c for c in df.columns if c not in EXPECTED_COLUMNS]
-        return df[final_order]
-
-    st.info("古いデータ形式を検出しました。最新の形式に自動的に更新します...")
-    
     df_migrated = df.copy()
-    for col in missing_cols:
-        if col == 'record_timestamp':
-            df_migrated[col] = pd.to_datetime(df_migrated['date']) + timedelta(hours=12)
-        else:
+    made_changes = False
+    
+    missing_cols = [col for col in EXPECTED_COLUMNS if col not in df_migrated.columns]
+    if missing_cols:
+        st.info("古いデータ形式を検出しました。スキーマを更新します...")
+        for col in missing_cols:
             df_migrated[col] = pd.NA
+        made_changes = True
 
-    final_cols_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns]
-    df_migrated = df_migrated[final_cols_order]
+    if 'record_timestamp' in df_migrated.columns:
+        df_migrated['record_timestamp'] = pd.to_datetime(df_migrated['record_timestamp'], errors='coerce')
+        missing_timestamp_mask = df_migrated['record_timestamp'].isna()
+        if missing_timestamp_mask.any():
+            st.info("古い記録にタイムスタンプを付与しています...")
+            pseudo_timestamps = pd.to_datetime(df_migrated.loc[missing_timestamp_mask, 'date']) + timedelta(hours=12)
+            df_migrated.loc[missing_timestamp_mask, 'record_timestamp'] = pseudo_timestamps
+            made_changes = True
 
-    try:
-        all_data_df = read_data('data', sheet_id)
-        if not all_data_df.empty:
-            other_users_data = all_data_df[all_data_df['user_id'] != user_id]
-            all_data_df_updated = pd.concat([other_users_data, df_migrated], ignore_index=True)
+    if made_changes:
+        st.info("データベースを最新の形式に更新しています...")
+        try:
+            all_data_df = read_data('data', sheet_id)
+            if not all_data_df.empty:
+                other_users_data = all_data_df[all_data_df['user_id'] != user_id]
+                all_data_df_updated = pd.concat([other_users_data, df_migrated], ignore_index=True)
+            else:
+                all_data_df_updated = df_migrated
 
             if write_data('data', sheet_id, all_data_df_updated):
                 st.success("データ形式の更新が完了し、永続的に保存しました。")
                 return df_migrated
             else:
-                st.error("スキーマ更新の保存に失敗しました。一時的なデータで続行します。")
-                return df_migrated
-    except Exception as e:
-        st.warning(f"スキーマ更新の保存中にエラーが発生しました: {e}")
+                st.error("スキーマ更新の保存に失敗しました。")
+        except Exception as e:
+            st.warning(f"スキーマ更新の保存中にエラーが発生しました: {e}")
     
-    return df_migrated
+    final_order = [col for col in EXPECTED_COLUMNS if col in df_migrated.columns] + [c for c in df_migrated.columns if c not in EXPECTED_COLUMNS]
+    return df_migrated[final_order]
 
 def run_wizard_interface(container):
     """価値観発見ウィザードのUIをレンダリングする再利用可能な関数"""
@@ -716,9 +721,9 @@ def run_wizard_interface(container):
                         st.error("価値観の保存に失敗しました。")
 
 # --- F. メインアプリケーション ---
-def main():
+if __name__ == '__main__':
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.47 - Final Cache Invalidation Fix & Complete Code')
+    st.caption('v7.0.48 - Final Complete Code without Omissions')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
