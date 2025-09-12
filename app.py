@@ -1,4 +1,4 @@
-# app.py (v7.0.49 - Refactored & Truly Complete Code)
+# app.py (v7.0.50 - All Bugs Fixed, Refined UX)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -41,8 +41,8 @@ ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for 
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 
-# バグ1修正：キャプションテキストを定数として定義
-CAPTION_TEXT = "0:全く.. | 25:あまり.. | 50:どちらとも.. | 75:やや.. | 100:完全に当てはまる"
+# バグ1修正：キャプションテキストを完全な表記に修正
+CAPTION_TEXT = "0: 全く当てはまらない | 25: あまり.. | 50: どちらとも.. | 75: やや.. | 100: 完全に当てはまる"
 
 ELEMENT_DEFINITIONS = {
     '睡眠': '質の良い睡眠がとれ、朝、すっきりと目覚められた度合い。',
@@ -413,17 +413,14 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         worksheet = sh.worksheet(sheet_name)
         
         df_copy = df.copy()
-        if 'date' in df_copy.columns:
-            df_copy['date'] = pd.to_datetime(df_copy['date']).dt.strftime('%Y-%m-%d')
         
-        # バグ4修正: 'DatetimeProperties' object has no attribute 'isoformat' エラーの修正
+        # 新規バグ(.dt accessor)修正: dateカラムを安全に文字列に変換
+        if 'date' in df_copy.columns:
+            df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
+
+        # 新規バグ(.dt accessor)修正: record_timestampカラムを安全に文字列に変換
         if 'record_timestamp' in df_copy.columns:
-            # 1. pd.to_datetimeで確実にdatetimeオブジェクトに変換
             timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
-            # 2. タイムゾーン情報がある場合は除去（tz_localize(None)の安全な代替）
-            if timestamps.dt.tz is not None:
-                timestamps = timestamps.dt.tz_convert(None)
-            # 3. NaTでない値のみをISO 8601形式の文字列に変換
             df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
 
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
@@ -644,12 +641,18 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
 
     # 2. record_timestampが空の行を検出し、dateから擬似的に生成
     if 'record_timestamp' in df_migrated.columns:
+        # まず、列全体をdatetimeに変換しようと試みる
         df_migrated['record_timestamp'] = pd.to_datetime(df_migrated['record_timestamp'], errors='coerce')
         missing_timestamp_mask = df_migrated['record_timestamp'].isna()
+        
+        # dateカラムもdatetimeに変換しておく
+        date_as_datetime = pd.to_datetime(df_migrated['date'], errors='coerce')
+
         if missing_timestamp_mask.any():
             st.info("古い記録にタイムスタンプを付与しています...")
             # JSTタイムゾーンで擬似タイムスタンプを生成
-            pseudo_timestamps = pd.to_datetime(df_migrated.loc[missing_timestamp_mask, 'date']).dt.tz_localize(JST)
+            # .dtアクセサはdatetime64[ns]型のSeriesにしか使えないので、Series全体に適用する
+            pseudo_timestamps = date_as_datetime[missing_timestamp_mask].dt.tz_localize(JST)
             df_migrated.loc[missing_timestamp_mask, 'record_timestamp'] = pseudo_timestamps
             made_changes = True
 
@@ -746,7 +749,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.49 - Refactored & Truly Complete Code')
+    st.caption('v7.0.50 - All Bugs Fixed, Refined UX')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -901,7 +904,19 @@ def main():
             st.rerun()
         
         st.sidebar.markdown("---")
-        st.sidebar.header('⚙️ 価値観 (q_t) の設定')
+        
+        # バグ3修正：ウィザードへのアクセスをサイドバーに移動
+        with st.sidebar:
+            st.subheader("🧭 あなたの羅針盤")
+            st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
+            if st.button("価値観発見ウィザードを始める", use_container_width=True):
+                st.session_state.auth_status = "AWAITING_WIZARD"
+                st.session_state.q_wizard_step = 1
+                st.session_state.q_comparisons = {}
+                st.rerun()
+            st.markdown("---")
+        
+        st.sidebar.header('⚙️ 価値観 (q_t) の手動調整')
         with st.sidebar.expander("▼ これは、何のために設定するの？"):
             st.markdown(EXPANDER_TEXTS['q_t'])
         
@@ -952,7 +967,7 @@ def main():
                             for element in LONG_ELEMENTS[domain]:
                                 st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
                         s_domain_values['s_' + domain] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=50, key=f"s_{domain}", label_visibility="collapsed")
-                        st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
+                        st.caption(CAPTION_TEXT)
                 else:
                     mode_string = 'deep'
                     col1, col2 = st.columns(2)
@@ -974,13 +989,13 @@ def main():
                                     st.markdown(f"**{element}**")
                                     st.caption(ELEMENT_DEFINITIONS.get(element, ""))
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
-                                    st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
+                                    st.caption(CAPTION_TEXT)
                                     s_element_values[col_name] = int(score)
 
                 st.markdown('**総合的な幸福感 (Gt)**')
                 with st.expander("▼ これはなぜ必要？"): st.markdown(EXPANDER_TEXTS['g_t'])
                 g_happiness = st.slider(label="slider_g_happiness", min_value=0, max_value=100, value=50, label_visibility="collapsed")
-                st.caption(CAPTION_TEXT) # バグ1修正：定数を使用
+                st.caption(CAPTION_TEXT)
                 
                 st.markdown('**今日の出来事や気づきは？（あなたのパスワードで暗号化されます）**')
                 with st.expander("▼ なぜ書くのがおすすめ？"): st.markdown(EXPANDER_TEXTS['event_log'])
@@ -1153,16 +1168,6 @@ def main():
         with tab3:
             st.header("🔧 設定とガイド")
             
-            # バグ3修正：ウィザードへのアクセスをここに常設
-            st.subheader("価値観の再発見")
-            st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
-            if st.button("価値観発見ウィザードを始める"):
-                st.session_state.auth_status = "AWAITING_WIZARD"
-                st.session_state.q_wizard_step = 1
-                st.session_state.q_comparisons = {}
-                st.rerun()
-
-            st.markdown('---')
             st.subheader("プロフィール情報（研究協力用）")
             with st.form("profile_form"):
                 users_df_for_profile = read_data('users', users_sheet_id)
