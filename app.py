@@ -1,4 +1,4 @@
-# app.py (v7.0.51 - All Bugs Fixed, Refined UX, Robust Data Handling)
+# app.py (v7.0.52 - Timestamp Bug Fixed, All Previous Fixes Integrated)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -41,7 +41,6 @@ ALL_ELEMENT_COLS = sorted([f's_element_{e}' for d in LONG_ELEMENTS.values() for 
 Q_COLS = ['q_' + d for d in DOMAINS]
 S_COLS = ['s_' + d for d in DOMAINS]
 
-# バグ1修正：キャプションテキストを完全な表記に修正
 CAPTION_TEXT = "0: 全く当てはまらない | 25: あまり当てはまらない | 50: どちらとも言えない| 75: やや当てはまる | 100: 完全に当てはまる"
 
 ELEMENT_DEFINITIONS = {
@@ -385,15 +384,18 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
 
         if df.empty:
             return df
-
+        
+        # タイムスタンプ消失バグ修正：読み込み時に型変換を徹底
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
-            
+        if 'record_timestamp' in df.columns:
+             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce')
+
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
-        all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness', 'record_timestamp'] + demographic_cols
+        all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
         
         for col in [c for c in all_cols_to_process if c in df.columns]:
-            if col not in demographic_cols and col not in ['record_timestamp']:
+            if col not in demographic_cols:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df
@@ -414,23 +416,18 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         df_copy = df.copy()
         
-        # 新規バグ(.dt accessor)修正: dateカラムを安全に文字列に変換
+        # タイムスタンプ消失バグ修正：書き込み前の型変換を堅牢化
         if 'date' in df_copy.columns:
-            # pd.to_datetimeで確実にdatetime-likeに変換してからstrftime
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
-        # 新規バグ(.dt accessor)修正: record_timestampカラムを安全に文字列に変換
         if 'record_timestamp' in df_copy.columns:
             timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
-            # is_datetime64_any_dtypeでdatetime-likeかを確認してから.dtアクセサを使用
             if pd.api.types.is_datetime64_any_dtype(timestamps):
                 if timestamps.dt.tz is not None:
-                    timestamps = timestamps.dt.tz_convert(None) # タイムゾーン情報を除去
-                # NaTでない値のみをISO 8601形式の文字列に変換
+                    timestamps = timestamps.dt.tz_convert(None) 
                 df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
-            else: # datetime-likeに変換できなかった場合 (例: 全てがNaT)
+            else:
                  df_copy['record_timestamp'] = ''
-
 
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
@@ -447,7 +444,6 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
                 df_copy[col] = '' 
 
         df_to_write = df_copy[db_schema_cols]
-        # .astype(str)の前に、NoneやNaNを空文字列に置換しておくことで、エラーを回避
         df_to_write = df_to_write.fillna('').astype(str)
         
         worksheet.clear()
@@ -759,7 +755,7 @@ def run_wizard_interface(container):
 # --- F. メインアプリケーション ---
 def main():
     st.title('🧭 Harmony Navigator')
-    st.caption('v7.0.51 - All Bugs Fixed, Refined UX, Robust Data Handling')
+    st.caption('v7.0.52 - Timestamp Bug Fixed, All Previous Fixes Integrated')
 
     try:
         users_sheet_id = st.secrets["connections"]["gsheets"]["users_sheet_id"]
@@ -864,7 +860,6 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         if not all_data_df.empty and 'user_id' in all_data_df.columns and user_id in all_data_df['user_id'].values:
             user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
-            # バグ2修正：ここでスキーマ移行を実行
             user_data_df = migrate_and_ensure_schema(user_data_df, user_id, data_sheet_id)
             
             has_q_data = not user_data_df[Q_COLS].dropna(how='all').empty
@@ -885,10 +880,9 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         
-        # タイムスタンプでソートするためにdatetimeに変換
         if 'record_timestamp' in user_data_df.columns:
             user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['record_timestamp'], errors='coerce')
-        else: # 念のためのフォールバック
+        else: 
              user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['date'])
 
         q_data_rows = user_data_df.dropna(subset=Q_COLS, how='all')
@@ -916,7 +910,6 @@ def main():
         
         st.sidebar.markdown("---")
         
-        # バグ3修正：ウィザードへのアクセスをサイドバーに移動
         with st.sidebar:
             st.subheader("🧭 あなたの羅針盤")
             st.info("現在の価値観を見直したい場合は、いつでもここからウィザードを再実行できます。")
