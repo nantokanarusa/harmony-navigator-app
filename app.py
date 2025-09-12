@@ -803,8 +803,48 @@ def run_demographics_interface(container):
                 time.sleep(1)
                 st.rerun()
 
+def inject_custom_css():
+    st.markdown(
+        """
+        <style>
+            /* Streamlitのコンテナ(border=True)のスタイルを上書き */
+            [data-testid="stVerticalBlockBorderWrapper"] {
+                background-color: #f0f2f6; /* 薄いグレーの背景 */
+                border: 1px solid #e0e0e0; /* より薄いグレーの境界線 */
+                border-radius: 10px;      /* 角を丸くする */
+                padding: 1.2rem 1rem 1rem; /* 内側の余白を調整 */
+            }
+
+            /* エキスパンダー（▼...）のスタイルを上書き */
+            [data-testid="stExpander"] {
+                background-color: #f7f7f7; /* コンテナより少しだけ明るいグレー */
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+            }
+            
+            /* フォームの背景をコンテナと統一 */
+            [data-testid="stForm"] {
+                background-color: #f0f2f6;
+                border: 1px solid #e0e0e0;
+                border-radius: 10px;
+                padding: 1.5rem;
+            }
+
+            /* ボタンのスタイルを少し柔らかく */
+            [data-testid="stButton"] button {
+                border-radius: 8px;
+            }
+
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 # --- F. メインアプリケーション ---
 def main():
+    # ★★★ ここに新しい行を追加 ★★★
+    inject_custom_css()
+    # ★★★ ここまで ★★★
+    
     st.title('🧭 Harmony Navigator')
     st.caption('v7.0.59 - Final Complete Code with All Fixes & Refinements')
     
