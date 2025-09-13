@@ -161,7 +161,16 @@ DEMOGRAPHIC_OPTIONS = {
     'chronic_illness': ['未選択', 'ない', 'ある'],
     'country': ['未選択', '日本', 'アメリカ合衆国', 'その他']
 }
-
+# ゲーミフィケーション機能：アチーブメント定義
+ACHIEVEMENTS = {
+    'record_1': {'name': '最初の航海日誌', 'description': '最初の記録をつけました。', 'emoji': '🎉', 'condition': lambda df: len(df) >= 1},
+    'record_7': {'name': '航海士の習慣', 'description': '7日間、連続で記録をつけました。', 'emoji': '🗓️', 'condition': lambda df, streak: streak >= 7},
+    'record_30': {'name': '熟練の航海士', 'description': '30日間、連続で記録をつけました。', 'emoji': '📅', 'condition': lambda df, streak: streak >= 30},
+    'deep_dive_1': {'name': '深海への探求者', 'description': '初めてディープ・ダイブモードで記録しました。', 'emoji': '🔬', 'condition': lambda df: 'deep' in df['mode'].values},
+    'q_updated': {'name': '羅針盤の調整', 'description': '価値観（q_t）を更新しました。', 'emoji': '🧭', 'condition': lambda df: len(df.dropna(subset=Q_COLS, how='all')) > 1},
+    'rhi_plus': {'name': '順風満帆', 'description': '初めてRHIがプラスになりました。', 'emoji': '⛵', 'condition': lambda df, rhi_results: rhi_results and rhi_results.get('RHI', 0) > 0},
+    'balance_master': {'name': '調和の達人', 'description': '全てのドメインの充足度が70点以上になった日がありました。', 'emoji': '⚖️', 'condition': lambda df: (df[S_COLS] >= 70).all(axis=1).any()}
+}
 
 # --- B. 暗号化エンジン ---
 class EncryptionManager:
@@ -497,6 +506,64 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
     except Exception as e:
         st.error(f"データの書き込み中にエラー: {e}")
         return False
+    # --- (D. データ永続化層 の後、E. UIコンポーネント の前に追加) ---
+
+def check_achievements(df: pd.DataFrame, rhi_results: dict, streak: int):
+    """ユーザーデータに基づいてアチーブメントの達成状況をチェックする"""
+    newly_unlocked = set()
+    currently_unlocked = st.session_state.unlocked_achievements.copy()
+
+    for ach_id, details in ACHIEVEMENTS.items():
+        if ach_id not in currently_unlocked:
+            condition_met = False
+            # 条件判定をラムダ関数の引数の数で分岐
+            if 'streak' in details['condition'].__code__.co_varnames:
+                condition_met = details['condition'](df, streak)
+            elif 'rhi_results' in details['condition'].__code__.co_varnames:
+                 condition_met = details['condition'](df, rhi_results)
+            else:
+                condition_met = details['condition'](df)
+            
+            if condition_met:
+                newly_unlocked.add(ach_id)
+
+    if newly_unlocked:
+        for ach_id in newly_unlocked:
+            st.toast(f"{ACHIEVEMENTS[ach_id]['emoji']} 実績解除： {ACHIEVEMENTS[ach_id]['name']}", icon="🏆")
+        st.session_state.unlocked_achievements.update(newly_unlocked)
+
+def calculate_streak(df: pd.DataFrame) -> int:
+    """連続記録日数を計算する"""
+    if df.empty:
+        return 0
+    
+    df_dates = df['date'].dropna().unique()
+    df_dates = sorted(list(df_dates), reverse=True)
+    
+    today = date.today()
+    streak = 0
+    
+    # 今日の記録があるか、または昨日の記録があるかで開始日を決める
+    if today in df_dates:
+        expected_date = today
+    elif (today - timedelta(days=1)) in df_dates:
+        expected_date = today - timedelta(days=1)
+        streak = 1 # 昨日は記録しているのでストリークは1から
+    else:
+        return 0
+
+    if streak == 0 and today in df_dates:
+        streak = 1
+        expected_date = today - timedelta(days=1)
+
+    for d in df_dates[1:]:
+        if d == expected_date:
+            streak += 1
+            expected_date -= timedelta(days=1)
+        else:
+            break
+            
+    return streak
 
 # --- E. UIコンポーネント ---
 def show_welcome_and_guide():
@@ -937,6 +1004,8 @@ def main():
         st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
     if 'q_wizard_step' not in st.session_state: st.session_state.q_wizard_step = 0
     if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
+    if 'record_streak' not in st.session_state: st.session_state.record_streak = 0
+    if 'unlocked_achievements' not in st.session_state: st.session_state.unlocked_achievements = set()
 
     auth_status = st.session_state.auth_status
 
@@ -1141,19 +1210,25 @@ def main():
         
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
+
+        # ★★★ ゲーミフィケーション：ストリーク計算 ★★★
+        st.session_state.record_streak = calculate_streak(user_data_df)
             
         st.sidebar.header(f"ようこそ、{user_id} さん！")
+        # ★★★ ゲーミフィケーション：ストリーク表示 ★★★
+        st.sidebar.metric("🔥 連続記録日数", f"{st.session_state.record_streak} 日")
+
         if st.sidebar.button("🚪 ログアウト（下船する）"):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
         
+        # ... (サイドバーの残りの部分は変更なし) ...
         st.sidebar.markdown("---")
         
         with st.sidebar:
             st.subheader("🧭 あなたの羅針盤")
             st.info("現在の価値観を見直したい場合は、いつでもここからガイドを開始できます。")
-            # 改善要望4: 「ウィザード」を「価値観発見ガイド」に変更
             if st.button("🗺️ 価値観発見ガイドを始める", use_container_width=True):
                 st.session_state.auth_status = "AWAITING_WIZARD"
                 st.session_state.q_wizard_step = 1
@@ -1183,7 +1258,6 @@ def main():
             st.markdown("---")
             st.subheader("📜 法的情報")
             show_legal_documents()
-
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
@@ -1364,6 +1438,8 @@ def main():
                                     tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
                 
                                     rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                                            # ★★★ ゲーミフィケーション：アチーブメントチェック ★★★
+                                            check_achievements(df_period, rhi_results, st.session_state.record_streak)
                 
                                     st.markdown("##### 分析結果")
                                     col1a, col2a, col3a, col4a = st.columns(4)
@@ -1541,6 +1617,25 @@ def main():
         
         with tab3:
             st.header("🔧 設定とガイド")
+            st.subheader("🏆 アチーブメント（実績）")
+            with st.container(border=True):
+                st.markdown("あなたの航海の記録です。")
+                unlocked_count = len(st.session_state.unlocked_achievements)
+                total_count = len(ACHIEVEMENTS)
+                st.progress(unlocked_count / total_count, text=f"{unlocked_count} / {total_count} 個 達成")
+                
+                cols = st.columns(4)
+                sorted_achievements = sorted(ACHIEVEMENTS.items(), key=lambda item: item[0])
+                
+                for i, (ach_id, details) in enumerate(sorted_achievements):
+                    col = cols[i % 4]
+                    if ach_id in st.session_state.unlocked_achievements:
+                        col.markdown(f"**{details['emoji']} {details['name']}**")
+                        col.caption(details['description'])
+                    else:
+                        col.markdown(f"**❔ ロック中**")
+                        col.caption("達成条件：？？？")
+            st.markdown("---")
             
             with st.container(border=True):
                 st.subheader("🔒 プライバシー設定")
