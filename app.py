@@ -660,27 +660,54 @@ def show_sample_dashboard():
     with st.container(border=True):
         st.info("💡 **これはサンプル表示です。** あなたが日々の記録を続けると、あなただけの、パーソナライズされた分析がここに表示されます。")
 
-        # サンプル用の架空データを作成
+        # サンプル用の架空データを作成（より現実的な相関を持つように調整）
+        np.random.seed(0) # 再現性のためのシード固定
+        days = 30
+        dates = pd.to_datetime([date.today() - timedelta(days=i) for i in range(days)][::-1])
+        
+        # 健康と余暇・心理に正の相関、経済（仕事の忙しさ）と人間関係に負の相関を持たせる
+        s_health = np.clip(np.random.normal(70, 15, days), 0, 100)
+        s_leisure = np.clip(s_health * 0.5 + np.random.normal(30, 15, days), 0, 100)
+        s_finance = np.clip(np.random.normal(75, 20, days), 0, 100)
+        s_relationships = np.clip(100 - s_finance * 0.6 + np.random.normal(0, 20, days), 0, 100)
+
         sample_data = {
-            'date': pd.to_datetime([date.today() - timedelta(days=i) for i in range(30)][::-1]),
-            'H': np.clip(np.random.normal(0.7, 0.15, 30), 0, 1),
-            'g_happiness': np.clip(np.random.normal(70, 12, 30), 0, 100),
-            'q_health': [20]*30, 'q_relationships': [20]*30, 'q_meaning': [20]*30,
-            'q_autonomy': [15]*30, 'q_finance': [10]*30, 'q_leisure': [10]*30, 'q_competition': [5]*30,
-            's_health': np.clip(np.random.normal(75, 10, 30), 0, 100),
-            's_relationships': np.clip(np.random.normal(60, 20, 30), 0, 100),
-            's_meaning': np.clip(np.random.normal(80, 15, 30), 0, 100),
-            's_autonomy': np.clip(np.random.normal(65, 18, 30), 0, 100),
-            's_finance': np.clip(np.random.normal(85, 5, 30), 0, 100),
-            's_leisure': np.clip(np.random.normal(55, 25, 30), 0, 100),
-            's_competition': np.clip(np.random.normal(50, 30, 30), 0, 100),
+            'date': dates,
+            'H': np.clip(np.random.normal(0.7, 0.15, days), 0, 1),
+            'g_happiness': np.clip(np.random.normal(70, 12, days), 0, 100),
+            'q_health': [20]*days, 'q_relationships': [25]*days, 'q_meaning': [20]*days,
+            'q_autonomy': [15]*days, 'q_finance': [10]*days, 'q_leisure': [5]*days, 'q_competition': [5]*days,
+            's_health': s_health,
+            's_relationships': s_relationships,
+            's_meaning': np.clip(np.random.normal(80, 15, days), 0, 100),
+            's_autonomy': np.clip(np.random.normal(65, 18, days), 0, 100),
+            's_finance': s_finance,
+            's_leisure': s_leisure,
+            's_competition': np.clip(np.random.normal(50, 30, days), 0, 100),
         }
         df_sample = pd.DataFrame(sample_data)
-        df_sample['U'] = np.clip(np.random.normal(0.8, 0.1, 30), 0, 1) # Uは簡易的に生成
+        df_sample['U'] = np.clip(np.random.normal(0.8, 0.1, days), 0, 1)
 
-        tab1_sample, tab2_sample = st.tabs(["**期待できること①** 自分の心の「構造」がわかる", "**期待できること②** 自分の心の「変化」がわかる"])
+        # 3つのタブで、提供価値を分かりやすく提示
+        tab1_sample, tab2_sample, tab3_sample = st.tabs([
+            "**① 心の変化を知る**", 
+            "**② 心の構造を知る**", 
+            "**③ 心の仕組みを知る**"
+        ])
 
         with tab1_sample:
+            st.markdown("##### 心の航海図：モデルの分析(H) vs あなたの直感(G)")
+            st.caption("あなたの日々の幸福度の推移を時系列で追い、変動のパターンや、モデルの分析とあなたの直感の『ズレ』を発見できます。")
+            
+            df_plot = df_sample.set_index('date').copy()
+            df_plot['H_scaled'] = df_plot['H'] * 100
+
+            fig_hg = go.Figure()
+            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析', line=dict(color='blue')))
+            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感', line=dict(color='green')))
+            st.plotly_chart(fig_hg, use_container_width=True)
+
+        with tab2_sample:
             st.markdown("##### 価値観 vs 経験 レーダーチャート")
             st.caption("あなたが「大切にしたいこと（理想）」と「実際に経験したこと（現実）」の構造的な『ズレ』を一目で把握できます。")
             
@@ -695,18 +722,18 @@ def show_sample_dashboard():
             dynamic_range_max = max(40, int(avg_q.max()) + 10)
             fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
             st.plotly_chart(fig_radar, use_container_width=True)
-
-        with tab2_sample:
-            st.markdown("##### 心の航海図：モデルの分析(H) vs あなたの直感(G)")
-            st.caption("あなたの日々の幸福度の推移を時系列で追い、変動のパターンや、モデルの分析とあなたの直感の『ズレ』を発見できます。")
+        
+        with tab3_sample:
+            st.markdown("##### 相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
+            st.caption("あなたの幸福を構成する各要素が、互いにどう影響し合っているか、その隠れた関係性を可視化します。")
             
-            df_plot = df_sample.set_index('date').copy()
-            df_plot['H_scaled'] = df_plot['H'] * 100
-
-            fig_hg = go.Figure()
-            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析', line=dict(color='blue')))
-            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感', line=dict(color='green')))
-            st.plotly_chart(fig_hg, use_container_width=True)
+            corr_df = df_sample[S_COLS].corr()
+            corr_df.fillna(0, inplace=True)
+            corr_df.columns = DOMAIN_NAMES_JP_VALUES
+            corr_df.index = DOMAIN_NAMES_JP_VALUES
+            
+            fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
+            st.plotly_chart(fig_heatmap, use_container_width=True)
 def show_welcome_and_guide():
     st.header("ようこそ、Harmony Navigatorへ")
     st.subheader("あなたのための、内省支援ツール")
