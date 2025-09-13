@@ -1233,69 +1233,72 @@ def main():
             run_wizard_interface(st.container())
         elif auth_status == "AWAITING_DEMOGRAPHICS":
             run_demographics_interface(st.container())
-    else: # NOT_LOGGED_IN
+        else: # NOT_LOGGED_IN
+            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+            # ここからが修正箇所です
+            # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
             with st.sidebar:
-            st.header("ようこそ！")
-            
-            with st.container(border=True):
-                st.subheader("🔑 ログイン")
-                with st.form("login_form_sidebar"):
-                    user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」")
-                    password_input = st.text_input("あなたの「パスワード」", type="password")
-                    submitted_login = st.form_submit_button("⚓ 乗船する", use_container_width=True)
-                    if submitted_login:
-                        if user_id_input and password_input:
-                            users_df = read_data('users', users_sheet_id)
-                            if not users_df.empty:
-                                user_record = users_df[users_df['user_id'] == user_id_input]
-                                if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
-                                    st.session_state.user_id = user_id_input
-                                    st.session_state.enc_manager = EncryptionManager(password_input)
-                                    st.session_state.auth_status = "CHECKING_USER_DATA"
-                                    st.rerun()
+                st.header("ようこそ！")
+                
+                with st.container(border=True):
+                    st.subheader("🔑 ログイン")
+                    with st.form("login_form_sidebar"):
+                        user_id_input = st.text_input("あなたの「秘密の合い言葉（ユーザーID）」")
+                        password_input = st.text_input("あなたの「パスワード」", type="password")
+                        submitted_login = st.form_submit_button("⚓ 乗船する", use_container_width=True)
+                        if submitted_login:
+                            if user_id_input and password_input:
+                                users_df = read_data('users', users_sheet_id)
+                                if not users_df.empty:
+                                    user_record = users_df[users_df['user_id'] == user_id_input]
+                                    if not user_record.empty and EncryptionManager.check_password(password_input, user_record.iloc[0]['password_hash']):
+                                        st.session_state.user_id = user_id_input
+                                        st.session_state.enc_manager = EncryptionManager(password_input)
+                                        st.session_state.auth_status = "CHECKING_USER_DATA"
+                                        st.rerun()
+                                    else:
+                                        st.error("合い言葉またはパスワードが間違っています。")
                                 else:
-                                    st.error("合い言葉またはパスワードが間違っています。")
+                                    st.error("その合い言葉を持つ船は見つかりませんでした。")
                             else:
-                                st.error("その合い言葉を持つ船は見つかりませんでした。")
-                        else:
-                            st.warning("両方のフィールドを入力してください。")
-            
-            with st.container(border=True):
-                st.subheader("🚀 新規登録")
-                with st.form("register_form_sidebar"):
-                    st.markdown("##### 1. 同意事項")
-                    age_consent = st.checkbox("私は16歳以上です。", value=True)
-                    agreement = st.checkbox("利用規約とプライバシーポリシーに同意します。")
-                    st.markdown("##### 2. パスワード設定")
-                    new_password = st.text_input("パスワード（8文字以上）", type="password")
-                    new_password_confirm = st.text_input("パスワード（確認用）", type="password")
-                    st.markdown("##### 3. 研究協力（任意）")
-                    consent = st.checkbox("匿名化された数値データを学術研究に利用することに同意します。", value=True)
-                    st.markdown("---")
-                    submitted_register = st.form_submit_button("✅ 同意して登録する", use_container_width=True)
-                    
-                    if submitted_register:
-                        if not age_consent: st.error("本アプリは16歳以上の方のみご利用いただけます。")
-                        elif not agreement: st.error("利用規約とプライバシーポリシーへの同意が必要です。")
-                        elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
-                        elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
-                        else:
-                            new_user_id = f"user_{uuid.uuid4().hex[:12]}"
-                            hashed_pw = EncryptionManager.hash_password(new_password)
-                            
-                            users_df = read_data('users', users_sheet_id)
-                            
-                            new_user_data = { 'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent }
-                            for key in DEMOGRAPHIC_OPTIONS.keys():
-                                new_user_data[key] = '未選択'
+                                st.warning("両方のフィールドを入力してください。")
+                
+                with st.container(border=True):
+                    st.subheader("🚀 新規登録")
+                    with st.form("register_form_sidebar"):
+                        st.markdown("##### 1. 同意事項")
+                        age_consent = st.checkbox("私は16歳以上です。", value=True)
+                        agreement = st.checkbox("利用規約とプライバシーポリシーに同意します。")
+                        st.markdown("##### 2. パスワード設定")
+                        new_password = st.text_input("パスワード（8文字以上）", type="password")
+                        new_password_confirm = st.text_input("パスワード（確認用）", type="password")
+                        st.markdown("##### 3. 研究協力（任意）")
+                        consent = st.checkbox("匿名化された数値データを学術研究に利用することに同意します。", value=True)
+                        st.markdown("---")
+                        submitted_register = st.form_submit_button("✅ 同意して登録する", use_container_width=True)
+                        
+                        if submitted_register:
+                            if not age_consent: st.error("本アプリは16歳以上の方のみご利用いただけます。")
+                            elif not agreement: st.error("利用規約とプライバシーポリシーへの同意が必要です。")
+                            elif len(new_password) < 8: st.error("パスワードは8文字以上で設定してください。")
+                            elif new_password != new_password_confirm: st.error("パスワードが一致しません。")
+                            else:
+                                new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+                                hashed_pw = EncryptionManager.hash_password(new_password)
+                                
+                                users_df = read_data('users', users_sheet_id)
+                                
+                                new_user_data = { 'user_id': new_user_id, 'password_hash': hashed_pw, 'consent': consent }
+                                for key in DEMOGRAPHIC_OPTIONS.keys():
+                                    new_user_data[key] = '未選択'
 
-                            new_user_df = pd.DataFrame([new_user_data])
-                            updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
-                            if write_data('users', users_sheet_id, updated_users_df):
-                                st.session_state.user_id = new_user_id
-                                st.session_state.enc_manager = EncryptionManager(new_password)
-                                st.session_state.auth_status = "AWAITING_ID"
-                                st.rerun()
+                                new_user_df = pd.DataFrame([new_user_data])
+                                updated_users_df = pd.concat([users_df, new_user_df], ignore_index=True)
+                                if write_data('users', users_sheet_id, updated_users_df):
+                                    st.session_state.user_id = new_user_id
+                                    st.session_state.enc_manager = EncryptionManager(new_password)
+                                    st.session_state.auth_status = "AWAITING_ID"
+                                    st.rerun()
                     # --- ★★★ ここまでが新しいサイドバーログインのロジック ★★★ ---
             show_welcome_and_guide()
             # --- ★★★ ここからが、UXフローを最適化した新しい表示ロジックです ★★★ ---
