@@ -1667,7 +1667,7 @@ def main():
                                 corr_df = df_period[S_COLS].corr()
                                 corr_df.columns = DOMAIN_NAMES_JP_VALUES
                                 corr_df.index = DOMAIN_NAMES_JP_VALUES
-                                fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
+                                fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])```
                                 st.plotly_chart(fig_heatmap, use_container_width=True)
         
                             with st.container(border=True):
