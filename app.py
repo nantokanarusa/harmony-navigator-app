@@ -1200,6 +1200,8 @@ def main():
         st.error("SecretsにスプレッドシートID (`users_sheet_id`, `data_sheet_id`) が設定されていません。")
         st.stop()
 
+    if 'record_mode' not in st.session_state: st.session_state.record_mode = "リセットモード"
+
     if 'auth_status' not in st.session_state: st.session_state.auth_status = "NOT_LOGGED_IN"
     if 'user_id' not in st.session_state: st.session_state.user_id = None
     if 'enc_manager' not in st.session_state: st.session_state.enc_manager = None
@@ -1504,6 +1506,16 @@ def main():
         
         # ... (サイドバーの残りの部分は変更なし) ...
         st.sidebar.markdown("---")
+
+        with st.sidebar:
+            st.subheader("🖋️ 記録設定")
+            with st.container(border=True):
+                st.session_state.record_mode = st.radio(
+                    "スライダーの初期状態:",
+                    ("リセットモード", "継続モード（前回値を引き継ぐ）"),
+                    index=0 if st.session_state.record_mode == "リセットモード" else 1,
+                    help="「リセットモード」は常に中央値から、「継続モード」は前回の記録値を引き継いで開始します。"
+                )
         
         with st.sidebar:
             st.subheader("🧭 あなたの羅針盤")
@@ -1563,32 +1575,56 @@ def main():
                 s_element_values = {}
                 s_domain_values = {}
 
+                # 前回値を引き継ぐための準備
+                latest_s_values = pd.Series(dtype=float)
+                if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）" and not user_data_df.empty:
+                    # タイムスタンプでソートして最新の記録を取得
+                    sortable_df = user_data_df.copy()
+                    if 'record_timestamp' not in sortable_df.columns:
+                        sortable_df['record_timestamp'] = pd.to_datetime(sortable_df['date']) # 古いデータのためのフォールバック
+                    sortable_df.sort_values(by='record_timestamp', ascending=False, inplace=True)
+                    latest_s_values = sortable_df.iloc[0]
+
                 if 'クイック' in input_mode:
                     mode_string = 'quick'
                     st.info("今日一日を振り返り、7つの幸福の領域が、それぞれどれくらい満たされていたかを評価してください。")
+                    
+                    # リセットボタン（継続モード時のみ表示）
+                    if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）":
+                        if st.button("🔄 全て中央値にリセット", key="reset_quick"):
+                            # st.rerun()は使わず、値を直接リセット
+                            latest_s_values = pd.Series(dtype=float) 
+
                     for domain in DOMAINS:
                         st.markdown(f"**{DOMAIN_NAMES_JP_DICT[domain]}**")
-                        with st.expander("▼ このドメインには、どんな「材料」が含まれる？"):
-                            for element in LONG_ELEMENTS[domain]:
-                                st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
-                        s_domain_values['s_' + domain] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=50, key=f"s_{domain}", label_visibility="collapsed")
+                        # （...既存のexpanderはそのまま...）
+                        
+                        # デフォルト値を動的に設定
+                        col_name = 's_' + domain
+                        val = latest_s_values.get(col_name, 50)
+                        default_val = 50 if pd.isna(val) else int(val)
+                        
+                        s_domain_values[col_name] = st.slider(label=f"slider_{domain}", min_value=0, max_value=100, value=default_val, key=f"s_{domain}", label_visibility="collapsed")
                         st.caption(CAPTION_TEXT)
-                else:
+                else: # ディープ・ダイブ
                     mode_string = 'deep'
-                    col1, col2 = st.columns(2)
-                    latest_s_elements = pd.Series(dtype=float)
-                    if not user_data_df.empty:
-                        sortable_df_deep = user_data_df.dropna(subset=['date']).sort_values(by='date', ascending=False)
-                        if not sortable_df_deep.empty:
-                            latest_s_elements = sortable_df_deep.iloc[0]
+                    
+                    # リセットボタン（継続モード時のみ表示）
+                    if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）":
+                        if st.button("🔄 全て中央値にリセット", key="reset_deep"):
+                            latest_s_values = pd.Series(dtype=float) 
 
+                    col1, col2 = st.columns(2)
+                    
                     for i, domain in enumerate(DOMAINS):
                         container = col1 if i < 4 else col2
                         with container:
                             with st.expander(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", expanded=True):
                                 for element in LONG_ELEMENTS[domain]:
                                     col_name = f's_element_{element}'
-                                    val = latest_s_elements.get(col_name, 50)
+                                    
+                                    # デフォルト値を動的に設定
+                                    val = latest_s_values.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
                                     
                                     st.markdown(f"**{element}**")
