@@ -654,6 +654,59 @@ def calculate_streak(df: pd.DataFrame) -> int:
     return streak
 
 # --- E. UIコンポーネント ---
+def show_sample_dashboard():
+    """新規ユーザー向けに、ダッシュボードのサンプルを可視化する"""
+    st.subheader("📊 このアプリで得られる分析（サンプル）")
+    with st.container(border=True):
+        st.info("💡 **これはサンプル表示です。** あなたが日々の記録を続けると、あなただけの、パーソナライズされた分析がここに表示されます。")
+
+        # サンプル用の架空データを作成
+        sample_data = {
+            'date': pd.to_datetime([date.today() - timedelta(days=i) for i in range(30)][::-1]),
+            'H': np.clip(np.random.normal(0.7, 0.15, 30), 0, 1),
+            'g_happiness': np.clip(np.random.normal(70, 12, 30), 0, 100),
+            'q_health': [20]*30, 'q_relationships': [20]*30, 'q_meaning': [20]*30,
+            'q_autonomy': [15]*30, 'q_finance': [10]*30, 'q_leisure': [10]*30, 'q_competition': [5]*30,
+            's_health': np.clip(np.random.normal(75, 10, 30), 0, 100),
+            's_relationships': np.clip(np.random.normal(60, 20, 30), 0, 100),
+            's_meaning': np.clip(np.random.normal(80, 15, 30), 0, 100),
+            's_autonomy': np.clip(np.random.normal(65, 18, 30), 0, 100),
+            's_finance': np.clip(np.random.normal(85, 5, 30), 0, 100),
+            's_leisure': np.clip(np.random.normal(55, 25, 30), 0, 100),
+            's_competition': np.clip(np.random.normal(50, 30, 30), 0, 100),
+        }
+        df_sample = pd.DataFrame(sample_data)
+        df_sample['U'] = np.clip(np.random.normal(0.8, 0.1, 30), 0, 1) # Uは簡易的に生成
+
+        tab1_sample, tab2_sample = st.tabs(["**期待できること①** 自分の心の「構造」がわかる", "**期待できること②** 自分の心の「変化」がわかる"])
+
+        with tab1_sample:
+            st.markdown("##### 価値観 vs 経験 レーダーチャート")
+            st.caption("あなたが「大切にしたいこと（理想）」と「実際に経験したこと（現実）」の構造的な『ズレ』を一目で把握できます。")
+            
+            avg_q = df_sample[Q_COLS].mean().values
+            avg_s = df_sample[S_COLS].mean().values
+            s_achieved_ratio = avg_s / 100.0
+            s_plot = avg_q * s_achieved_ratio
+
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(r=np.append(s_plot, s_plot[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='toself', name='あなたの経験 (現実の形)', line=dict(color='grey'), fillcolor='rgba(128,128,128,0.3)'))
+            fig_radar.add_trace(go.Scatterpolar(r=np.append(avg_q, avg_q[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='none', name='あなたの価値観 (理想の形)', line=dict(color='blue', dash='dash')))
+            dynamic_range_max = max(40, int(avg_q.max()) + 10)
+            fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        with tab2_sample:
+            st.markdown("##### 心の航海図：モデルの分析(H) vs あなたの直感(G)")
+            st.caption("あなたの日々の幸福度の推移を時系列で追い、変動のパターンや、モデルの分析とあなたの直感の『ズレ』を発見できます。")
+            
+            df_plot = df_sample.set_index('date').copy()
+            df_plot['H_scaled'] = df_plot['H'] * 100
+
+            fig_hg = go.Figure()
+            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析', line=dict(color='blue')))
+            fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感', line=dict(color='green')))
+            st.plotly_chart(fig_hg, use_container_width=True)
 def show_welcome_and_guide():
     st.header("ようこそ、Harmony Navigatorへ")
     st.subheader("あなたのための、内省支援ツール")
@@ -1119,7 +1172,14 @@ def main():
             run_demographics_interface(st.container())
         else: # NOT_LOGGED_IN
             show_welcome_and_guide()
-                        # --- ★★★ ここからが新しい追加箇所 ★★★ ---
+            # --- ★★★ ここからが、UXフローを最適化した新しい表示ロジックです ★★★ ---
+            
+            # 1. まず、視覚的なメリット（サンプルのダッシュボード）を見せる
+            st.markdown("---")
+            show_sample_dashboard()
+
+            # 2. 次に、ユーザーが抱きがちな懸念にFAQで答える
+            st.markdown("---")
             st.subheader("❓ よくあるご質問（FAQ）")
             with st.container(border=True):
                 with st.expander("プライバシーとセキュリティについて"):
@@ -1178,14 +1238,16 @@ def main():
                     「価値観発見ガイド」は、あなたに「これが正しい価値観です」と教えるものではありません。21の質問は、あなた自身も気づいていないかもしれない、**あなたの心の中にある潜在的な優先順位**を、客観的に引き出すためのものです。
                     ガイドが出した結果は、あくまで**「たたき台」**です。その結果を見て、「うん、しっくりくるな」あるいは「いや、自分はもっとここを重視したい」と感じ、最終的にサイドバーのスライダーで**あなた自身の手で微調整する**ことこそが、最も重要なプロセスです。アプリは、あなたの自己決定を最後まで尊重します。
                     """)
-            # --- ★★★ ここまでが新しい追加箇所 ★★★ ---
+
+            # 3. 最後に、最終的なアクション（登録・ログイン）を促す
+            st.markdown("---")
+            st.subheader("さあ、あなたの旅を始めましょう")
             
-            # --- ★★★ ここからが修正箇所 ★★★ ---
-            # 新規登録・ログインの前に、法的文書を表示する
             with st.container(border=True):
                 st.markdown("##### 利用を開始する前に")
                 st.info("本アプリケーションの利用を開始する前に、以下の利用規約とプライバシーポリシーをご確認・ご同意いただく必要があります。")
                 show_legal_documents()
+
             # --- ★★★ ここまでが修正箇所 ★★★ ---
 
             door1, door2 = st.tabs(["**🚀 新しい船で旅を始める (初めての方)**", "**🔑 秘密の合い言葉で乗船する (2回目以降の方)**"])
