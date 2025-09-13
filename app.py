@@ -1233,7 +1233,7 @@ def main():
             run_wizard_interface(st.container())
         elif auth_status == "AWAITING_DEMOGRAPHICS":
             run_demographics_interface(st.container())
-        else: # NOT_LOGGED_IN
+       else: # NOT_LOGGED_IN
                     # --- ★★★ ここからが新しいサイドバーログインのロジック ★★★ ---
                     with st.sidebar:
                         st.header("ようこそ！")
@@ -1297,7 +1297,7 @@ def main():
                                             st.session_state.enc_manager = EncryptionManager(new_password)
                                             st.session_state.auth_status = "AWAITING_ID"
                                             st.rerun()
-            # --- ★★★ ここまでが新しいサイドバーログインのロジック ★★★ ---
+                    # --- ★★★ ここまでが新しいサイドバーログインのロジック ★★★ ---
             show_welcome_and_guide()
             # --- ★★★ ここからが、UXフローを最適化した新しい表示ロジックです ★★★ ---
             
