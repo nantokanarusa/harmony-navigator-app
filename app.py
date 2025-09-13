@@ -1661,12 +1661,21 @@ def main():
                                     st.info("""
                                     このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているかを可視化します。\n
                                     - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。\n
-                                    - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。
+                                    - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。\n
+                                    - **白色**は、二つの要素に明確な関係性が見られない（無相関）ことを示します。
                                     """)
                                 
+                                # ★★★ ここからが修正箇所 ★★★
+                                # 相関係数を計算
                                 corr_df = df_period[S_COLS].corr()
+                                
+                                # 計算結果に含まれるNaNを0（無相関）に置換する
+                                corr_df.fillna(0, inplace=True)
+                                # ★★★ ここまでが修正箇所 ★★★
+        
                                 corr_df.columns = DOMAIN_NAMES_JP_VALUES
                                 corr_df.index = DOMAIN_NAMES_JP_VALUES
+                                
                                 fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
                                 st.plotly_chart(fig_heatmap, use_container_width=True)
         
