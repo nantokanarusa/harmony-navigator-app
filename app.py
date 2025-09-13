@@ -1509,57 +1509,60 @@ def main():
                                     df_processed = df_processed.sort_values('date')
                                 
                                 st.subheader("📈 期間分析とリスク評価 (RHI)")
+                                                
+                                                period_options = [7, 30, 90]
+                                                
+                                                df_period = df_processed
+                                                if len(df_processed.dropna(subset=['H'])) >= 7:
+                                                    valid_periods = [p for p in period_options if len(df_processed.dropna(subset=['H'])) >= p]
+                                                    default_index = len(valid_periods) - 1 if valid_periods else 0
+                                                    selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
+                                                    df_period = df_processed.dropna(subset=['H', 'g_happiness']).tail(selected_period)
                                 
-                                period_options = [7, 30, 90]
+                                                    st.markdown("##### あなたのリスク許容度を設定")
+                                                    col1, col2, col3 = st.columns(3)
+                                                    lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
+                                                    gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
+                                                    tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
                                 
-                                df_period = df_processed
-                                if len(df_processed.dropna(subset=['H'])) >= 7:
-                                    valid_periods = [p for p in period_options if len(df_processed.dropna(subset=['H'])) >= p]
-                                    default_index = len(valid_periods) - 1 if valid_periods else 0
-                                    selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
-                                    df_period = df_processed.dropna(subset=['H', 'g_happiness']).tail(selected_period)
-                
-                                    st.markdown("##### あなたのリスク許容度を設定")
-                                    col1, col2, col3 = st.columns(3)
-                                    lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-                                    gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-                                    tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
-                
-                                    rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
-                                            # ★★★ ゲーミフィケーション：アチーブメントチェック ★★★
-                                            check_achievements(df_period, rhi_results, st.session_state.record_streak)
-                
-                                    st.markdown("##### 分析結果")
-                                    col1a, col2a, col3a, col4a = st.columns(4)
-                                    col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
-                                    col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
-                                    col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
-                                    col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
-                                    
-                                    if rhi_results['RHI'] < 0.2: 
-                                        st.error("""
-                                        **【専門家への相談を検討してください】**\n
-                                        分析結果によると、あなたの幸福度は持続的に低いか、または非常に不安定な状態にある可能性が示唆されています。
-                                        もし、この状態が続いて辛いと感じる場合は、一人で抱え込まず、カウンセラーや医師といった専門家に相談することを検討してみてください。
-                                        """)
-                                    st.markdown("---")
-                                    st.subheader("🧭 次の航海へのヒント")
-                
-                                    focus_domain, proposal = generate_intervention_proposal(df_period, rhi_results)
-                
-                                    if focus_domain and proposal:
-                                        with st.container(border=True):
-                                            st.markdown(f"分析の結果、今週は特に **{DOMAIN_NAMES_JP_DICT[focus_domain]}** の領域が、あなたの幸福の安定性に影響を与えていたようです。")
-                                            st.info(f"もしよろしければ、今週は以下の小さなアクションを試してみませんか？")
-                                            
-                                            for p in proposal:
-                                                st.button(f"「{p}」を試してみる", use_container_width=True)
-                                    else:
-                                        st.info("分析できる十分なデータがないか、全てのドメインが安定しています。素晴らしい航海です！")
-                
-                                else:
-                                    st.info(f"現在{len(df_processed.dropna(subset=['H']))}日分の有効なデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
-                
+                                                    rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                                
+                                                    st.markdown("##### 分析結果")
+                                                    col1a, col2a, col3a, col4a = st.columns(4)
+                                                    col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
+                                                    col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
+                                                    col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
+                                                    col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
+                                                    
+                                                    # ★★★ ここが修正箇所です ★★★
+                                                    # アチーブメントチェックの呼び出しを、正しいインデント位置に移動しました。
+                                                    check_achievements(df_period, rhi_results, st.session_state.record_streak)
+                                
+                                                    if rhi_results['RHI'] < 0.2: 
+                                                        st.error("""
+                                                        **【専門家への相談を検討してください】**\n
+                                                        分析結果によると、あなたの幸福度は持続的に低いか、または非常に不安定な状態にある可能性が示唆されています。
+                                                        もし、この状態が続いて辛いと感じる場合は、一人で抱え込まず、カウンセラーや医師といった専門家に相談することを検討してみてください。
+                                                        """)
+                                                    
+                                                    st.markdown("---")
+                                                    st.subheader("🧭 次の航海へのヒント")
+                                
+                                                    focus_domain, proposal = generate_intervention_proposal(df_period, rhi_results)
+                                
+                                                    if focus_domain and proposal:
+                                                        with st.container(border=True):
+                                                            st.markdown(f"分析の結果、今週は特に **{DOMAIN_NAMES_JP_DICT[focus_domain]}** の領域が、あなたの幸福の安定性に影響を与えていたようです。")
+                                                            st.info(f"もしよろしければ、今週は以下の小さなアクションを試してみませんか？")
+                                                            
+                                                            for p in proposal:
+                                                                st.button(f"「{p}」を試してみる", use_container_width=True)
+                                                    else:
+                                                        with st.container(border=True):
+                                                            st.info("分析できる十分なデータがないか、全てのドメインが安定しています。素晴らしい航海です！")
+                                
+                                                else:
+                                                    st.info(f"現在{len(df_processed.dropna(subset=['H']))}日分の有効なデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
                                 if not df_processed.empty:
                                     analyze_discrepancy(df_processed)
                                     
