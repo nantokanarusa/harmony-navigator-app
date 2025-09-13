@@ -498,6 +498,74 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         st.error(f"データの書き込み中にエラー: {e}")
         return False
 
+# --- デバッグ用: タイムスタンプ単発書き込みテスト ---
+def debug_write_and_read_timestamp(sheet_ref: str):
+    """
+    1行だけ 'debug_timestamp' カラムでタイムスタンプを書き込み、
+    直後にワークシートから最後の数行を読み出して結果を表示します。
+    これで「書き込めているか」「どのワークシートに書き込まれているか」
+    「append_row が動くか」等が確認できます。
+    """
+    import traceback
+    client = get_gspread_client()
+    if client is None:
+        st.error("gspread client is not available. Secrets or gspread import may be missing.")
+        return
+
+    sheet_key = extract_sheet_id(sheet_ref)
+    try:
+        sh = client.open_by_key(sheet_key)
+    except Exception as e:
+        st.error(f"スプレッドシートを開けません。sheet_key={sheet_key}。例外: {e}")
+        st.exception(e)
+        return
+
+    # ワークシート名（あなたの実際の書き込み先名に合わせてください）
+    worksheet_name = "harmony_data"
+    try:
+        try:
+            ws = sh.worksheet(worksheet_name)
+        except Exception:
+            # 見つからなければ新規作成（デバッグ用）
+            ws = sh.add_worksheet(title=worksheet_name, rows="100", cols="20")
+            st.write(f"ワークシート '{worksheet_name}' を新規作成しました（デバッグ用）。")
+    except Exception as e:
+        st.error(f"ワークシート取得/作成に失敗しました: {e}")
+        st.exception(e)
+        return
+
+    # 今のタイムスタンプを作成して append する
+    now_utc = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    now_local = datetime.now().replace(microsecond=0).isoformat()
+    debug_row = {
+        'date': date.today().isoformat(),
+        'debug_timestamp_utc': now_utc,
+        'debug_timestamp_local': now_local,
+        'note': 'debug append_row'
+    }
+    # append_row は列ヘッダ無視で行単位で追加するため確実
+    try:
+        # append_row expects a list in sheet column order. We will append values in a fixed order:
+        row_values = [debug_row['date'], debug_row['debug_timestamp_utc'], debug_row['debug_timestamp_local'], debug_row['note']]
+        ws.append_row(row_values, value_input_option='USER_ENTERED')
+        st.success(f"append_row による書き込みに成功しました。値: {row_values}")
+    except Exception as e:
+        st.error(f"append_row に失敗しました。例外: {e}")
+        st.exception(e)
+        return
+
+    # 書き込み直後にシートの最後の 10 行を取得して表示
+    try:
+        records = ws.get_all_records()
+        st.write("ワークシートの最後の 10 レコード（get_all_records）:")
+        if len(records) == 0:
+            st.write("レコードが空です。")
+        else:
+            st.write(records[-10:])
+    except Exception as e:
+        st.error(f"読み取りに失敗しました: {e}")
+        st.exception(e)
+
 # --- E. UIコンポーネント ---
 def show_welcome_and_guide():
     st.header("ようこそ、Harmony Navigatorへ")
