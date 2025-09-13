@@ -171,6 +171,50 @@ ACHIEVEMENTS = {
     'rhi_plus': {'name': '順風満帆', 'description': '初めてRHIがプラスになりました。', 'emoji': '⛵', 'condition': lambda df, rhi_results: rhi_results and rhi_results.get('RHI', 0) > 0},
     'balance_master': {'name': '調和の達人', 'description': '全てのドメインの充足度が70点以上になった日がありました。', 'emoji': '⚖️', 'condition': lambda df: (df[S_COLS] >= 70).all(axis=1).any()}
 }
+# レベル2介入提案機能：介入レシピ定義
+INTERVENTION_RECIPES = {
+    'health': [
+        "いつもより15分早く就寝する",
+        "ランチに一品、野菜を追加する",
+        "一駅手前で降りて歩いてみる",
+        "5分間のストレッチや瞑想を行う",
+    ],
+    'relationships': [
+        "しばらく連絡していない友人に、短いメッセージを送る",
+        "家族やパートナーに、小さな感謝を言葉で伝える",
+        "ランチは誰かを誘ってみる",
+        "人の話を、評価せずに最後まで聞いてみる",
+    ],
+    'meaning': [
+        "今日の仕事が、最終的に誰の役に立ったか想像してみる",
+        "週末にできる、小さなボランティア活動を探してみる",
+        "自分の価値観について、5分だけ日記に書き出してみる",
+        "尊敬する人の本や記事を読んでみる",
+    ],
+    'autonomy': [
+        "明日の予定を一つ、完全に自分の「やりたい」だけで決めてみる",
+        "いつもと違う通勤路や、入ったことのない店を試してみる",
+        "興味がある分野の入門動画を一つ見てみる",
+        "身の回りの小さなことで、自分でコントロールできることを見つける",
+    ],
+    'finance': [
+        "今週の出費を一度だけ見直してみる",
+        "自分の仕事のスキルアップに繋がる記事を一つ読む",
+        "お昼は手作りのお弁当に挑戦してみる",
+        "固定費（サブスク等）で、見直せるものがないか確認する",
+    ],
+    'leisure': [
+        "通勤中に、好きな音楽を3曲、集中して聴く時間を作る",
+        "週末に、全く仕事と関係ない趣味の時間を1時間確保する",
+        "美しいと感じるものの写真を一枚撮ってみる",
+        "寝る前に、今日あった良かったことを3つ書き出す",
+    ],
+    'competition': [
+        "健全な競争を楽しめる、ゲームやスポーツをしてみる",
+        "他人との比較ではなく、昨日の自分との比較で「成長」を記録する",
+        "競争のストレスを感じたら、意識的に休息を取る",
+    ]
+}
 
 # --- B. 暗号化エンジン ---
 class EncryptionManager:
@@ -371,6 +415,50 @@ def calculate_rhi_metrics(df_period: pd.DataFrame, lambda_rhi: float, gamma_rhi:
     frac_below = (df_period['H'] < tau_rhi).mean()
     rhi = mean_H - (lambda_rhi * std_H) - (gamma_rhi * frac_below)
     return {'mean_H': mean_H, 'std_H': std_H, 'frac_below': frac_below, 'RHI': rhi}
+def generate_intervention_proposal(df_period: pd.DataFrame, rhi_results: dict):
+    """
+    分析結果に基づき、パーソナライズされた介入提案を生成する。
+    RHIへの悪影響が最も大きいドメインを特定し、レシピを提案する。
+    """
+    if df_period.empty or not rhi_results:
+        return None, None
+
+    # RHIへの各要素の寄与度（悪影響度）を計算
+    mean_h = rhi_results.get('mean_H', 0)
+    std_h = rhi_results.get('std_H', 0)
+    
+    # 各ドメインを一つずつ除外した場合のRHIの変化をシミュレーション
+    impacts = {}
+    for domain_to_exclude in DOMAINS:
+        temp_s_cols = [s for s in S_COLS if 's_' + domain_to_exclude not in s]
+        
+        # 悪影響を計算するため、単純化して標準偏差への寄与を測る
+        # あるドメインの変動が全体の変動にどれだけ寄与したか
+        domain_std = df_period['s_' + domain_to_exclude].std()
+        
+        # ズレ（U）への影響も考慮する
+        q_val = df_period['q_' + domain_to_exclude].mean()
+        s_val = df_period['s_' + domain_to_exclude].mean()
+        gap_contribution = q_val * (1 - (s_val / 100.0)) # 価値が高いのに満たされていない度合い
+        
+        # 影響度をスコアリング（標準偏差と価値-充足ギャップを重視）
+        impact_score = (domain_std / 100.0) * 0.7 + gap_contribution * 0.3
+        impacts[domain_to_exclude] = impact_score
+
+    if not impacts:
+        return None, None
+
+    # 最も悪影響が大きいドメインを特定
+    focus_domain = max(impacts, key=impacts.get)
+    
+    # そのドメインに対応する介入レシピをランダムに2つ提案
+    recipes = INTERVENTION_RECIPES.get(focus_domain, [])
+    if len(recipes) > 2:
+        proposal = np.random.choice(recipes, 2, replace=False).tolist()
+    else:
+        proposal = recipes
+        
+    return focus_domain, proposal
 
 # --- D. データ永続化層 ---
 @st.cache_resource(ttl=3600)
@@ -1454,6 +1542,20 @@ def main():
                                         分析結果によると、あなたの幸福度は持続的に低いか、または非常に不安定な状態にある可能性が示唆されています。
                                         もし、この状態が続いて辛いと感じる場合は、一人で抱え込まず、カウンセラーや医師といった専門家に相談することを検討してみてください。
                                         """)
+                                    st.markdown("---")
+                                    st.subheader("🧭 次の航海へのヒント")
+                
+                                    focus_domain, proposal = generate_intervention_proposal(df_period, rhi_results)
+                
+                                    if focus_domain and proposal:
+                                        with st.container(border=True):
+                                            st.markdown(f"分析の結果、今週は特に **{DOMAIN_NAMES_JP_DICT[focus_domain]}** の領域が、あなたの幸福の安定性に影響を与えていたようです。")
+                                            st.info(f"もしよろしければ、今週は以下の小さなアクションを試してみませんか？")
+                                            
+                                            for p in proposal:
+                                                st.button(f"「{p}」を試してみる", use_container_width=True)
+                                    else:
+                                        st.info("分析できる十分なデータがないか、全てのドメインが安定しています。素晴らしい航海です！")
                 
                                 else:
                                     st.info(f"現在{len(df_processed.dropna(subset=['H']))}日分の有効なデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
