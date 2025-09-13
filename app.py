@@ -423,13 +423,52 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
         if 'record_timestamp' in df_copy.columns:
+            # Attempt to coerce column to datetimes. This yields a Series.
             timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
-            if pd.api.types.is_datetime64_any_dtype(timestamps):
-                if timestamps.dt.tz is not None:
-                    timestamps = timestamps.dt.tz_convert(None) 
-                df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
-            else:
-                 df_copy['record_timestamp'] = ''
+
+            try:
+                # Use the dtype of the Series for robust detection
+                if pd.api.types.is_datetime64_any_dtype(timestamps.dtype):
+                    # If timezone-aware, convert to UTC and then remove tz for consistent storage
+                    try:
+                        # timestamps.dt.tz might not exist for some pandas versions; use getattr safely
+                        if getattr(timestamps.dt, 'tz', None) is not None:
+                            # Convert to UTC then drop tz info
+                            timestamps = timestamps.dt.tz_convert('UTC').dt.tz_localize(None)
+                        # Format as ISO with trailing Z to indicate UTC when possible
+                        df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() + 'Z' if pd.notna(x) else '')
+                    except Exception:
+                        # Fallback: try simple isoformat if .dt access fails
+                        df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
+                else:
+                    # Fallback: handle object-dtype entries (python datetimes or strings)
+                    def _to_iso(val):
+                        try:
+                            if pd.isna(val):
+                                return ''
+                            ts = pd.to_datetime(val, errors='coerce')
+                            if pd.isna(ts):
+                                return ''
+                            # If tz-aware, convert to UTC then produce ISO + 'Z'
+                            if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                                try:
+                                    # pandas Timestamp may need tz_convert; try to normalize to UTC
+                                    ts_utc = ts.tz_convert('UTC') if hasattr(ts, 'tz_convert') else ts
+                                    # remove tzinfo for consistent formatting
+                                    try:
+                                        ts_utc = ts_utc.tz_localize(None)
+                                    except Exception:
+                                        pass
+                                    return ts_utc.isoformat() + 'Z'
+                                except Exception:
+                                    pass
+                            return ts.isoformat()
+                        except Exception:
+                            return ''
+                    df_copy['record_timestamp'] = df_copy['record_timestamp'].apply(_to_iso)
+            except Exception:
+                # Ensure column exists and is safe to write if anything unexpected occurs
+                df_copy['record_timestamp'] = df_copy['record_timestamp'].apply(lambda x: '' if pd.isna(x) else str(x))
 
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
