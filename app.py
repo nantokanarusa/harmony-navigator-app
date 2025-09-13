@@ -1233,7 +1233,7 @@ def main():
             run_wizard_interface(st.container())
         elif auth_status == "AWAITING_DEMOGRAPHICS":
             run_demographics_interface(st.container())
-       else: # NOT_LOGGED_IN
+    else: # NOT_LOGGED_IN
                 # --- ★★★ ここからが新しいサイドバーログインのロジック ★★★ ---
                 with st.sidebar:
                     st.header("ようこそ！")
