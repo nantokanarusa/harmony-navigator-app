@@ -1201,6 +1201,9 @@ def main():
                     if sum(st.session_state.q_values.values()) != 100:
                         st.error('価値観 (q_t) の合計が100になっていません。サイドバーを確認してください。')
                     else:
+                        # --- ★★★ ここからが、あなたの分析に基づく、新しい安全な保存ロジックです ★★★ ---
+                        
+                        # 1. 保存する新しいレコードを準備する
                         new_record = {}
                         if mode_string == 'deep':
                             new_record.update({col: pd.NA for col in ALL_ELEMENT_COLS})
@@ -1219,7 +1222,7 @@ def main():
                         new_record.update({
                             'user_id': user_id, 
                             'date': target_date,
-                            'record_timestamp': datetime.now(JST),
+                            'record_timestamp': datetime.now(JST), # 本物のタイムスタンプを必ず付与
                             'mode': mode_string,
                             'consent': consent_status,
                             'g_happiness': int(g_happiness), 
@@ -1228,29 +1231,40 @@ def main():
                         new_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
 
                         new_df_row = pd.DataFrame([new_record])
-                        
-                        all_data_df_to_update = read_data('data', data_sheet_id)
-                        if not all_data_df_to_update.empty:
-                            # 既存の記録を削除する前に、dateカラムをdatetime.dateに変換しておく
-                            all_data_df_to_update['date'] = pd.to_datetime(all_data_df_to_update['date'], errors='coerce').dt.date
-                            condition = (all_data_df_to_update['user_id'] == user_id) & (all_data_df_to_update['date'] == target_date)
-                            all_data_df_to_update = all_data_df_to_update[~condition]
 
-                        all_data_df_updated = pd.concat([all_data_df_to_update, new_df_row], ignore_index=True)
-                        
-                        # ★★★ TypeError バグ修正：並べ替えの前にデータ型を統一 ★★★
-                        if 'date' in all_data_df_updated.columns:
-                            all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
-                        if 'record_timestamp' in all_data_df_updated.columns:
-                            all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce')
+                        # 2. 既存の全データを読み込む
+                        try:
+                            df_existing = read_data('data', data_sheet_id)
+                        except Exception as e:
+                            st.warning(f"既存データの読み込みに失敗しました。新しいデータのみで保存を試みます。エラー: {e}")
+                            df_existing = pd.DataFrame()
 
-                        all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
+                        # 3. 安全なマージ処理（「同じユーザー」かつ「同じ日付」の行だけを置換）
+                        if df_existing.empty:
+                            df_to_write = new_df_row
+                        else:
+                            # 既存データから、今回保存するユーザーと日付に一致する行を"除く"
+                            # これにより、他ユーザーのデータや、同じ日付でもuser_idが異なる行（デバッグ行など）を保護する
+                            condition_to_remove = (df_existing['user_id'] == user_id) & (pd.to_datetime(df_existing['date']).dt.date == target_date)
+                            df_preserved = df_existing[~condition_to_remove]
+                            
+                            # 除外したデータフレームに、新しいレコードを追加する
+                            df_to_write = pd.concat([df_preserved, new_df_row], ignore_index=True)
+
+                        # 4. 書き込み前の最終的なデータ型統一と並べ替え
+                        if 'date' in df_to_write.columns:
+                            df_to_write['date'] = pd.to_datetime(df_to_write['date'], errors='coerce')
+                        if 'record_timestamp' in df_to_write.columns:
+                            df_to_write['record_timestamp'] = pd.to_datetime(df_to_write['record_timestamp'], errors='coerce')
+
+                        df_to_write = df_to_write.sort_values(by=['user_id', 'date', 'record_timestamp']).reset_index(drop=True)
                         
-                        if write_data('data', data_sheet_id, all_data_df_updated):
+                        # 5. データベースへの書き込みとキャッシュのクリア
+                        if write_data('data', data_sheet_id, df_to_write):
                             st.success(f'{target_date.strftime("%Y-%m-%d")} の記録を永続的に保存しました！')
                             st.balloons()
                             time.sleep(1)
-                            st.rerun()
+                            st.rerun() # 再実行して最新のデータを表示
                         else:
                              st.error("データの保存に失敗しました。後でもう一度お試しください。")
                 with tab2:
