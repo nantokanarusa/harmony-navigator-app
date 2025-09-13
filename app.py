@@ -1501,224 +1501,226 @@ def main():
                 
                             df_to_process = user_data_df.copy()
                             if df_to_process.dropna(subset=Q_COLS, how='all').empty:
-                                st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
-                            else:
-                                df_processed = calculate_metrics(df_to_process, alpha=0.6)
-                                if 'date' in df_processed.columns:
-                                    df_processed['date'] = pd.to_datetime(df_processed['date'])
-                                    df_processed = df_processed.sort_values('date')
-                                
-                                st.subheader("📈 期間分析とリスク評価 (RHI)")
+                                           st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
+                                        else:
+                                            df_processed = calculate_metrics(df_to_process, alpha=0.6)
+                                            if 'date' in df_processed.columns:
+                                                df_processed['date'] = pd.to_datetime(df_processed['date'])
+                                                df_processed = df_processed.sort_values('date')
+                                            
+                                            # ★★★ ここからがインデント修正箇所です ★★★
+                                            # 以下のブロック全体を一段階外側（左）にずらしました。
+                                            st.subheader("📈 期間分析とリスク評価 (RHI)")
+                                            
+                                            period_options = [7, 30, 90]
+                                            
+                                            df_period = df_processed
+                                            if len(df_processed.dropna(subset=['H'])) >= 7:
+                                                valid_periods = [p for p in period_options if len(df_processed.dropna(subset=['H'])) >= p]
+                                                default_index = len(valid_periods) - 1 if valid_periods else 0
+                                                selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
+                                                df_period = df_processed.dropna(subset=['H', 'g_happiness']).tail(selected_period)
+                            
+                                                st.markdown("##### あなたのリスク許容度を設定")
+                                                col1, col2, col3 = st.columns(3)
+                                                lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
+                                                gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
+                                                tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
+                            
+                                                rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
+                            
+                                                st.markdown("##### 分析結果")
+                                                col1a, col2a, col3a, col4a = st.columns(4)
+                                                col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
+                                                col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
+                                                col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
+                                                col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
                                                 
-                                                period_options = [7, 30, 90]
+                                                check_achievements(df_period, rhi_results, st.session_state.record_streak)
+                            
+                                                if rhi_results['RHI'] < 0.2: 
+                                                    st.error("""
+                                                    **【専門家への相談を検討してください】**\n
+                                                    分析結果によると、あなたの幸福度は持続的に低いか、または非常に不安定な状態にある可能性が示唆されています。
+                                                    もし、この状態が続いて辛いと感じる場合は、一人で抱え込まず、カウンセラーや医師といった専門家に相談することを検討してみてください。
+                                                    """)
                                                 
-                                                df_period = df_processed
-                                                if len(df_processed.dropna(subset=['H'])) >= 7:
-                                                    valid_periods = [p for p in period_options if len(df_processed.dropna(subset=['H'])) >= p]
-                                                    default_index = len(valid_periods) - 1 if valid_periods else 0
-                                                    selected_period = st.selectbox("分析期間を選択してください（日）:", valid_periods, index=default_index)
-                                                    df_period = df_processed.dropna(subset=['H', 'g_happiness']).tail(selected_period)
-                                
-                                                    st.markdown("##### あなたのリスク許容度を設定")
-                                                    col1, col2, col3 = st.columns(3)
-                                                    lambda_param = col1.slider("変動(不安定さ)へのペナルティ(λ)", 0.0, 2.0, 0.5, 0.1, help="値が大きいほど、日々の幸福度の浮き沈みが激しいことを、より重く評価します。")
-                                                    gamma_param = col2.slider("下振れ(不調)へのペナルティ(γ)", 0.0, 2.0, 1.0, 0.1, help="値が大きいほど、幸福度が低い日が続くことを、より深刻な問題として評価します。")
-                                                    tau_param = col3.slider("「不調」と見なす閾値(τ)", 0.0, 1.0, 0.5, 0.05, help="この値を下回る日を「不調な日」としてカウントします。")
-                                
-                                                    rhi_results = calculate_rhi_metrics(df_period, lambda_param, gamma_param, tau_param)
-                                
-                                                    st.markdown("##### 分析結果")
-                                                    col1a, col2a, col3a, col4a = st.columns(4)
-                                                    col1a.metric("平均調和度 (H̄)", f"{rhi_results['mean_H']:.3f}")
-                                                    col2a.metric("変動リスク (σ)", f"{rhi_results['std_H']:.3f}")
-                                                    col3a.metric("不調日数割合", f"{rhi_results['frac_below']:.1%}")
-                                                    col4a.metric("リスク調整済・幸福指数 (RHI)", f"{rhi_results['RHI']:.3f}", delta=f"{rhi_results['RHI'] - rhi_results['mean_H']:.3f} (平均との差)")
-                                                    
-                                                    # ★★★ ここが修正箇所です ★★★
-                                                    # アチーブメントチェックの呼び出しを、正しいインデント位置に移動しました。
-                                                    check_achievements(df_period, rhi_results, st.session_state.record_streak)
-                                
-                                                    if rhi_results['RHI'] < 0.2: 
-                                                        st.error("""
-                                                        **【専門家への相談を検討してください】**\n
-                                                        分析結果によると、あなたの幸福度は持続的に低いか、または非常に不安定な状態にある可能性が示唆されています。
-                                                        もし、この状態が続いて辛いと感じる場合は、一人で抱え込まず、カウンセラーや医師といった専門家に相談することを検討してみてください。
+                                                st.markdown("---")
+                                                st.subheader("🧭 次の航海へのヒント")
+                            
+                                                focus_domain, proposal = generate_intervention_proposal(df_period, rhi_results)
+                            
+                                                if focus_domain and proposal:
+                                                    with st.container(border=True):
+                                                        st.markdown(f"分析の結果、今週は特に **{DOMAIN_NAMES_JP_DICT[focus_domain]}** の領域が、あなたの幸福の安定性に影響を与えていたようです。")
+                                                        st.info(f"もしよろしければ、今週は以下の小さなアクションを試してみませんか？")
+                                                        
+                                                        for p in proposal:
+                                                            st.button(f"「{p}」を試してみる", use_container_width=True)
+                                                else:
+                                                    with st.container(border=True):
+                                                        st.info("分析できる十分なデータがないか、全てのドメインが安定しています。素晴らしい航海です！")
+                            
+                                            else:
+                                                st.info(f"現在{len(df_processed.dropna(subset=['H']))}日分の有効なデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
+                            
+                                            if not df_processed.empty:
+                                                analyze_discrepancy(df_processed)
+                                                
+                                                st.markdown("---")
+                                                st.subheader("🗺️ あなたの心の航海図")
+                            
+                                                df_plot = df_period.set_index('date').copy()
+                                                df_plot['H_scaled'] = df_plot['H'] * 100
+                                                
+                                                st.markdown("##### 心の天気図：モデルの分析(H) vs あなたの直感(G)")
+                                                
+                                                fig_hg = go.Figure()
+                                                fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析', line=dict(color='blue')))
+                                                fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感', line=dict(color='green')))
+                                                st.plotly_chart(fig_hg, use_container_width=True)
+                            
+                                                if len(df_plot) > 1:
+                                                    st.markdown("##### 自己対話のヒント：あなたの「心のクセ」との対話")
+                                                    with st.expander("▼ このチャートの見方"):
+                                                        st.info("""
+                                                        このグラフは、あなたの**『直感的な実感(G)』**と、あなたの価値観に基づいてモデルが算出した**『論理的な分析結果(H)』**の差を示します。この『ズレ』は、どちらが正しいかを示すものではありません。\n
+                                                        - **平常範囲（薄い灰色の帯）**: あなたの「いつもの心のクセ」の範囲です。この中に収まっているなら、自己認識は安定しています。\n
+                                                        - **プラスへの逸脱**: あなたの直感が、まだ言葉にできていないポジティブな何かを捉えているサインかもしれません。\n
+                                                        - **マイナスへの逸脱**: あなたの論理的な自己認識と、実際の心の状態の間に、何か見過ごしている要因があるサインかもしれません。\n
+                                                        **バンドを突き抜けた日**に何があったか、日記を振り返ってみると、深い自己発見のヒントが隠されている可能性があります。
                                                         """)
                                                     
-                                                    st.markdown("---")
-                                                    st.subheader("🧭 次の航海へのヒント")
-                                
-                                                    focus_domain, proposal = generate_intervention_proposal(df_period, rhi_results)
-                                
-                                                    if focus_domain and proposal:
-                                                        with st.container(border=True):
-                                                            st.markdown(f"分析の結果、今週は特に **{DOMAIN_NAMES_JP_DICT[focus_domain]}** の領域が、あなたの幸福の安定性に影響を与えていたようです。")
-                                                            st.info(f"もしよろしければ、今週は以下の小さなアクションを試してみませんか？")
-                                                            
-                                                            for p in proposal:
-                                                                st.button(f"「{p}」を試してみる", use_container_width=True)
+                                                    df_plot['insight_gap'] = df_plot['g_happiness'] - df_plot['H_scaled']
+                                                    gap_mean = df_plot['insight_gap'].mean()
+                                                    gap_std = df_plot['insight_gap'].std()
+                                                    upper_band = gap_mean + 1.5 * gap_std
+                                                    lower_band = gap_mean - 1.5 * gap_std
+                            
+                                                    fig_gap = go.Figure()
+                                                    fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[upper_band]*len(df_plot), fill=None, mode='lines', line_color='rgba(128,128,128,0.2)', name='平常範囲の上限'))
+                                                    fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[lower_band]*len(df_plot), fill='tonexty', mode='lines', line_color='rgba(128,128,128,0.2)', name='平常範囲の下限'))
+                                                    fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[gap_mean]*len(df_plot), mode='lines', line=dict(dash='dash', color='grey'), name='あなたの「心のクセ」(平均)'))
+                                                    fig_gap.add_trace(go.Scatter(x=df_plot.index, y=df_plot['insight_gap'], mode='lines+markers', name='日々のズレ (G-H)', line=dict(color='black')))
+                                                    
+                                                    st.plotly_chart(fig_gap, use_container_width=True)
+                                                
+                                                st.markdown("---")
+                                                st.subheader("🔬 構造分析")
+                                                
+                                                col_chart1, col_chart2 = st.columns(2)
+                                                
+                                                with col_chart1:
+                                                    st.markdown("##### 価値観 vs 経験 レーダーチャート")
+                                                    
+                                                    latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
+                                                    avg_q = latest_q_values
+                                                    avg_s = df_period[S_COLS].mean().values
+                                                    
+                                                    s_achieved_ratio = avg_s / 100.0 
+                                                    s_plot = avg_q * s_achieved_ratio
+                            
+                                                    fig = go.Figure()
+                            
+                                                    fig.add_trace(go.Scatterpolar(
+                                                          r=np.append(s_plot, s_plot[0]),
+                                                          theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
+                                                          fill='toself',
+                                                          name='あなたの経験 (現実の形)',
+                                                          line=dict(color='grey'),
+                                                          fillcolor='rgba(128,128,128,0.3)'
+                                                    ))
+                                                    fig.add_trace(go.Scatterpolar(
+                                                          r=np.append(avg_q, avg_q[0]),
+                                                          theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
+                                                          fill='none',
+                                                          name='あなたの価値観 (理想の形)',
+                                                          line=dict(color='blue', dash='dash')
+                                                    ))
+                            
+                                                    dynamic_range_max = max(40, int(avg_q.max()) + 10) if avg_q.any() and avg_q.max() > 0 else 40
+                                                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
+                                                    st.plotly_chart(fig, use_container_width=True)
+                            
+                                                with col_chart2:
+                                                    st.markdown("##### 価値観-経験 ギャップ分析")
+                                                    st.caption("算出方法: ギャップ(%) = あなたの価値観の構成比 - あなたの経験の構成比")
+                                                    
+                                                    q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
+                                                    s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
+                            
+                                                    gap_data = pd.DataFrame({'domain': DOMAIN_NAMES_JP_VALUES, 'gap': q_norm - s_norm}).sort_values('gap', ascending=False)
+                                                    
+                                                    fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h', color='gap', color_continuous_scale='RdBu', color_continuous_midpoint=0, labels={'gap':'ギャップ (%ポイント)', 'domain':'ドメイン'}, title="+: 価値観 > 経験 (課題), -: 経験 > 価値観 (強み)")
+                                                    fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
+                                                    st.plotly_chart(fig_bar, use_container_width=True)
+                                                
+                                                st.markdown("---")
+                                                st.subheader("🔬 詳細分析：あなたの幸福のメカニズムを探る")
+                            
+                                                with st.container(border=True):
+                                                    st.markdown("##### 相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
+                                                    with st.expander("▼ このチャートの見方"):
+                                                        st.info("""
+                                                        このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているかを可視化します。\n
+                                                        - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。\n
+                                                        - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。
+                                                        """)
+                                                    
+                                                    corr_df = df_period[S_COLS].corr()
+                                                    corr_df.columns = DOMAIN_NAMES_JP_VALUES
+                                                    corr_df.index = DOMAIN_NAMES_JP_VALUES
+                                                    fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
+                                                    st.plotly_chart(fig_heatmap, use_container_width=True)
+                            
+                                                with st.container(border=True):
+                                                    st.markdown("##### イベント影響度ランキング：幸福の「源泉」と「ストレス源」")
+                                                    with st.expander("▼ このランキングの見方"):
+                                                        st.info("""
+                                                        あなたの日記（イベントログ）からキーワードを抽出し、その言葉が記録された日の幸福度が、全体の平均と比べてどれだけ高かったか（または低かったか）をランキングします。
+                                                        """)
+                                                    
+                                                    df_period_logs = df_period.copy()
+                                                    df_period_logs['event_log'] = df_period_logs['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                                                    
+                                                    word_impact = {}
+                                                    mean_h_total = df_period_logs['H'].mean()
+                                                    
+                                                    df_period_logs['words'] = df_period_logs['event_log'].str.findall(r'[\wぁ-んァ-ン一-龥ー]+')
+                                                    all_words = [word for sublist in df_period_logs['words'].dropna() for word in sublist]
+                                                    
+                                                    common_words = [word for word, count in Counter(all_words).most_common(10) if len(word) > 1]
+                            
+                                                    for word in common_words:
+                                                        impact_days_h = df_period_logs[df_period_logs['event_log'].str.contains(word, na=False)]['H'].mean()
+                                                        impact = impact_days_h - mean_h_total
+                                                        word_impact[word] = impact
+                            
+                                                    if word_impact:
+                                                        impact_df = pd.DataFrame(list(word_impact.items()), columns=['キーワード', '幸福度へのインパクト']).sort_values('幸福度へのインパクト', ascending=False)
+                                                        st.dataframe(impact_df, use_container_width=True)
                                                     else:
-                                                        with st.container(border=True):
-                                                            st.info("分析できる十分なデータがないか、全てのドメインが安定しています。素晴らしい航海です！")
-                                
-                                                else:
-                                                    st.info(f"現在{len(df_processed.dropna(subset=['H']))}日分の有効なデータがあります。期間分析（RHIなど）には最低7日分のデータが必要です。")
-                               if not df_processed.empty:
-                                                    analyze_discrepancy(df_processed)
+                                                        st.info("分析できる十分なイベントログがありません。日記を記録してみましょう！")
+                            
+                                                with st.container(border=True):
+                                                    st.markdown("##### 「価値観と現実のズレ」の推移：あなたの航海術の上達度")
+                                                    with st.expander("▼ このチャートの見方"):
+                                                         st.info("""
+                                                        このグラフは、あなたの「理想（価値観）」と「現実（日々の経験）」の**ズレの大きさ (`1 - U`)** が、時間と共にどう変化したかを示します。\n
+                                                        線が**長期的に下降傾向**にあれば、あなたの人生が、より価値観と一致した、調和の取れた方向へ進んでいることを意味します。
+                                                        """)
                                                     
-                                                    st.markdown("---")
-                                                    st.subheader("🗺️ あなたの心の航海図")
-                                
-                                                    df_plot = df_period.set_index('date').copy()
-                                                    df_plot['H_scaled'] = df_plot['H'] * 100
-                                                    
-                                                    st.markdown("##### 心の天気図：モデルの分析(H) vs あなたの直感(G)")
-                                                    
-                                                    fig_hg = go.Figure()
-                                                    fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['H_scaled'], mode='lines+markers', name='調和度 (H) - モデルの分析', line=dict(color='blue')))
-                                                    fig_hg.add_trace(go.Scatter(x=df_plot.index, y=df_plot['g_happiness'], mode='lines+markers', name='実感値 (G) - あなたの直感', line=dict(color='green')))
-                                                    st.plotly_chart(fig_hg, use_container_width=True)
-                                
-                                                    if len(df_plot) > 1:
-                                                        st.markdown("##### 自己対話のヒント：あなたの「心のクセ」との対話")
-                                                        with st.expander("▼ このチャートの見方"):
-                                                            st.info("""
-                                                            このグラフは、あなたの**『直感的な実感(G)』**と、あなたの価値観に基づいてモデルが算出した**『論理的な分析結果(H)』**の差を示します。この『ズレ』は、どちらが正しいかを示すものではありません。\n
-                                                            - **平常範囲（薄い灰色の帯）**: あなたの「いつもの心のクセ」の範囲です。この中に収まっているなら、自己認識は安定しています。\n
-                                                            - **プラスへの逸脱**: あなたの直感が、まだ言葉にできていないポジティブな何かを捉えているサインかもしれません。\n
-                                                            - **マイナスへの逸脱**: あなたの論理的な自己認識と、実際の心の状態の間に、何か見過ごしている要因があるサインかもしれません。\n
-                                                            **バンドを突き抜けた日**に何があったか、日記を振り返ってみると、深い自己発見のヒントが隠されている可能性があります。
-                                                            """)
-                                                        
-                                                        df_plot['insight_gap'] = df_plot['g_happiness'] - df_plot['H_scaled']
-                                                        gap_mean = df_plot['insight_gap'].mean()
-                                                        gap_std = df_plot['insight_gap'].std()
-                                                        upper_band = gap_mean + 1.5 * gap_std
-                                                        lower_band = gap_mean - 1.5 * gap_std
-                                
-                                                        fig_gap = go.Figure()
-                                                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[upper_band]*len(df_plot), fill=None, mode='lines', line_color='rgba(128,128,128,0.2)', name='平常範囲の上限'))
-                                                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[lower_band]*len(df_plot), fill='tonexty', mode='lines', line_color='rgba(128,128,128,0.2)', name='平常範囲の下限'))
-                                                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=[gap_mean]*len(df_plot), mode='lines', line=dict(dash='dash', color='grey'), name='あなたの「心のクセ」(平均)'))
-                                                        fig_gap.add_trace(go.Scatter(x=df_plot.index, y=df_plot['insight_gap'], mode='lines+markers', name='日々のズレ (G-H)', line=dict(color='black')))
-                                                        
-                                                        st.plotly_chart(fig_gap, use_container_width=True)
-                                                    
-                                                    st.markdown("---")
-                                                    st.subheader("🔬 構造分析")
-                                                    
-                                                    col_chart1, col_chart2 = st.columns(2)
-                                                    
-                                                    with col_chart1:
-                                                        st.markdown("##### 価値観 vs 経験 レーダーチャート")
-                                                        
-                                                        latest_q_values = np.array([st.session_state.q_values[d] for d in DOMAINS])
-                                                        avg_q = latest_q_values
-                                                        avg_s = df_period[S_COLS].mean().values
-                                                        
-                                                        s_achieved_ratio = avg_s / 100.0 
-                                                        s_plot = avg_q * s_achieved_ratio
-                                
-                                                        fig = go.Figure()
-                                
-                                                        fig.add_trace(go.Scatterpolar(
-                                                              r=np.append(s_plot, s_plot[0]),
-                                                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
-                                                              fill='toself',
-                                                              name='あなたの経験 (現実の形)',
-                                                              line=dict(color='grey'),
-                                                              fillcolor='rgba(128,128,128,0.3)'
-                                                        ))
-                                                        fig.add_trace(go.Scatterpolar(
-                                                              r=np.append(avg_q, avg_q[0]),
-                                                              theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]),
-                                                              fill='none',
-                                                              name='あなたの価値観 (理想の形)',
-                                                              line=dict(color='blue', dash='dash')
-                                                        ))
-                                
-                                                        dynamic_range_max = max(40, int(avg_q.max()) + 10) if avg_q.any() and avg_q.max() > 0 else 40
-                                                        fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
-                                                        st.plotly_chart(fig, use_container_width=True)
-                                
-                                                    with col_chart2:
-                                                        st.markdown("##### 価値観-経験 ギャップ分析")
-                                                        st.caption("算出方法: ギャップ(%) = あなたの価値観の構成比 - あなたの経験の構成比")
-                                                        
-                                                        q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
-                                                        s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
-                                
-                                                        gap_data = pd.DataFrame({'domain': DOMAIN_NAMES_JP_VALUES, 'gap': q_norm - s_norm}).sort_values('gap', ascending=False)
-                                                        
-                                                        fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h', color='gap', color_continuous_scale='RdBu', color_continuous_midpoint=0, labels={'gap':'ギャップ (%ポイント)', 'domain':'ドメイン'}, title="+: 価値観 > 経験 (課題), -: 経験 > 価値観 (強み)")
-                                                        fig_bar.update_layout(yaxis={'categoryorder':'total ascending'})
-                                                        st.plotly_chart(fig_bar, use_container_width=True)
-                                                    
-                                                    st.markdown("---")
-                                                    st.subheader("🔬 詳細分析：あなたの幸福のメカニズムを探る")
-                                
-                                                    with st.container(border=True):
-                                                        st.markdown("##### 相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
-                                                        with st.expander("▼ このチャートの見方"):
-                                                            st.info("""
-                                                            このヒートマップは、あなたの幸福を構成する各要素が、互いにどう影響し合っているかを可視化します。\n
-                                                            - **青色が濃い**ほど、二つの要素が**一緒に高まる**傾向（相乗効果）を示します。\n
-                                                            - **赤色が濃い**ほど、片方が高まるともう片方が**低くなる**傾向（トレードオフ）を示します。
-                                                            """)
-                                                        
-                                                        corr_df = df_period[S_COLS].corr()
-                                                        corr_df.columns = DOMAIN_NAMES_JP_VALUES
-                                                        corr_df.index = DOMAIN_NAMES_JP_VALUES
-                                                        fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
-                                                        st.plotly_chart(fig_heatmap, use_container_width=True)
-                                
-                                                    with st.container(border=True):
-                                                        st.markdown("##### イベント影響度ランキング：幸福の「源泉」と「ストレス源」")
-                                                        with st.expander("▼ このランキングの見方"):
-                                                            st.info("""
-                                                            あなたの日記（イベントログ）からキーワードを抽出し、その言葉が記録された日の幸福度が、全体の平均と比べてどれだけ高かったか（または低かったか）をランキングします。
-                                                            """)
-                                                        
-                                                        df_period_logs = df_period.copy()
-                                                        df_period_logs['event_log'] = df_period_logs['event_log'].apply(st.session_state.enc_manager.decrypt_log)
-                                                        
-                                                        word_impact = {}
-                                                        mean_h_total = df_period_logs['H'].mean()
-                                                        
-                                                        df_period_logs['words'] = df_period_logs['event_log'].str.findall(r'[\wぁ-んァ-ン一-龥ー]+')
-                                                        all_words = [word for sublist in df_period_logs['words'].dropna() for word in sublist]
-                                                        
-                                                        common_words = [word for word, count in Counter(all_words).most_common(10) if len(word) > 1]
-                                
-                                                        for word in common_words:
-                                                            impact_days_h = df_period_logs[df_period_logs['event_log'].str.contains(word, na=False)]['H'].mean()
-                                                            impact = impact_days_h - mean_h_total
-                                                            word_impact[word] = impact
-                                
-                                                        if word_impact:
-                                                            impact_df = pd.DataFrame(list(word_impact.items()), columns=['キーワード', '幸福度へのインパクト']).sort_values('幸福度へのインパクト', ascending=False)
-                                                            st.dataframe(impact_df, use_container_width=True)
-                                                        else:
-                                                            st.info("分析できる十分なイベントログがありません。日記を記録してみましょう！")
-                                
-                                                    with st.container(border=True):
-                                                        st.markdown("##### 「価値観と現実のズレ」の推移：あなたの航海術の上達度")
-                                                        with st.expander("▼ このチャートの見方"):
-                                                             st.info("""
-                                                            このグラフは、あなたの「理想（価値観）」と「現実（日々の経験）」の**ズレの大きさ (`1 - U`)** が、時間と共にどう変化したかを示します。\n
-                                                            線が**長期的に下降傾向**にあれば、あなたの人生が、より価値観と一致した、調和の取れた方向へ進んでいることを意味します。
-                                                            """)
-                                                        
-                                                        df_period['gap_U'] = 1 - df_period['U']
-                                                        st.line_chart(df_period.set_index('date')['gap_U'])
-                                
-                                                    st.markdown("---")
-                                                    st.subheader('📖 全記録データ')
-                                                    df_display = user_data_df.copy()
-                                                    if 'event_log' in df_display.columns:
-                                                        df_display['event_log'] = df_display['event_log'].apply(st.session_state.enc_manager.decrypt_log)
-                                                        df_display.rename(columns={'event_log': 'イベントログ（復号済）'}, inplace=True)
-                                                    st.dataframe(df_display.drop(columns=['user_id'], errors='ignore').sort_values(by='date', ascending=False).round(3))
+                                                    df_period['gap_U'] = 1 - df_period['U']
+                                                    st.line_chart(df_period.set_index('date')['gap_U'])
+                            
+                                                st.markdown("---")
+                                                st.subheader('📖 全記録データ')
+                                                df_display = user_data_df.copy()
+                                                if 'event_log' in df_display.columns:
+                                                    df_display['event_log'] = df_display['event_log'].apply(st.session_state.enc_manager.decrypt_log)
+                                                    df_display.rename(columns={'event_log': 'イベントログ（復号済）'}, inplace=True)
+                                                st.dataframe(df_display.drop(columns=['user_id'], errors='ignore').sort_values(by='date', ascending=False).round(3))
+
         
         with tab3:
             st.header("🔧 設定とガイド")
