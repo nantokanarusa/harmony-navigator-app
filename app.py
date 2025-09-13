@@ -688,16 +688,15 @@ def show_sample_dashboard():
         df_sample = pd.DataFrame(sample_data)
         df_sample['U'] = np.clip(np.random.normal(0.8, 0.1, days), 0, 1)
 
-        # 3つのタブで、提供価値を分かりやすく提示
-        tab1_sample, tab2_sample, tab3_sample = st.tabs([
-            "**① 心の変化を知る**", 
-            "**② 心の構造を知る**", 
-            "**③ 心の仕組みを知る**"
+        # 2つのタブで、提供価値を分かりやすく提示
+        tab1_sample, tab2_sample = st.tabs([
+            "**① 心の変化を見る（時系列分析）**", 
+            "**② 心の構造を知る（構造分析）**"
         ])
 
         with tab1_sample:
             st.markdown("##### 心の航海図：モデルの分析(H) vs あなたの直感(G)")
-            st.caption("あなたの日々の幸福度の推移を時系列で追い、変動のパターンや、モデルの分析とあなたの直感の『ズレ』を発見できます。")
+            st.caption("あなたの日々の幸福度の推移を追い、変動のパターンや、モデルの分析とあなたの直感の『ズレ』を発見できます。")
             
             df_plot = df_sample.set_index('date').copy()
             df_plot['H_scaled'] = df_plot['H'] * 100
@@ -708,32 +707,50 @@ def show_sample_dashboard():
             st.plotly_chart(fig_hg, use_container_width=True)
 
         with tab2_sample:
-            st.markdown("##### 価値観 vs 経験 レーダーチャート")
-            st.caption("あなたが「大切にしたいこと（理想）」と「実際に経験したこと（現実）」の構造的な『ズレ』を一目で把握できます。")
-            
             avg_q = df_sample[Q_COLS].mean().values
             avg_s = df_sample[S_COLS].mean().values
-            s_achieved_ratio = avg_s / 100.0
-            s_plot = avg_q * s_achieved_ratio
+            
+            col_chart1, col_chart2 = st.columns(2)
+            
+            with col_chart1:
+                st.markdown("##### 価値観 vs 経験 レーダーチャート")
+                st.caption("「理想（青い線）」と「現実（灰色のエリア）」の形の『ズレ』を一目で把握できます。")
+                
+                s_achieved_ratio = avg_s / 100.0
+                s_plot = avg_q * s_achieved_ratio
 
-            fig_radar = go.Figure()
-            fig_radar.add_trace(go.Scatterpolar(r=np.append(s_plot, s_plot[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='toself', name='あなたの経験 (現実の形)', line=dict(color='grey'), fillcolor='rgba(128,128,128,0.3)'))
-            fig_radar.add_trace(go.Scatterpolar(r=np.append(avg_q, avg_q[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='none', name='あなたの価値観 (理想の形)', line=dict(color='blue', dash='dash')))
-            dynamic_range_max = max(40, int(avg_q.max()) + 10)
-            fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
-            st.plotly_chart(fig_radar, use_container_width=True)
+                fig_radar = go.Figure()
+                fig_radar.add_trace(go.Scatterpolar(r=np.append(s_plot, s_plot[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='toself', name='あなたの経験 (現実の形)', line=dict(color='grey'), fillcolor='rgba(128,128,128,0.3)'))
+                fig_radar.add_trace(go.Scatterpolar(r=np.append(avg_q, avg_q[0]), theta=np.append(DOMAIN_NAMES_JP_VALUES, DOMAIN_NAMES_JP_VALUES[0]), fill='none', name='あなたの価値観 (理想の形)', line=dict(color='blue', dash='dash')))
+                dynamic_range_max = max(40, int(avg_q.max()) + 10)
+                fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, dynamic_range_max])), showlegend=True, legend=dict(yanchor="top", y=1.15, xanchor="left", x=0.01))
+                st.plotly_chart(fig_radar, use_container_width=True)
+
+            with col_chart2:
+                # ★★★ ここに抜け落ちていた棒グラフを追加 ★★★
+                st.markdown("##### 価値観-経験 ギャップ分析 (棒グラフ)")
+                st.caption("プラスは「課題」、マイナスは「強みや見直しのヒント」を示唆します。")
+
+                q_norm = avg_q / avg_q.sum() * 100 if avg_q.sum() > 0 else avg_q
+                s_norm = avg_s / avg_s.sum() * 100 if avg_s.sum() > 0 else avg_s
+
+                gap_data = pd.DataFrame({'domain': DOMAIN_NAMES_JP_VALUES, 'gap': q_norm - s_norm}).sort_values('gap', ascending=False)
+                
+                fig_bar = px.bar(gap_data, x='gap', y='domain', orientation='h', color='gap', color_continuous_scale='RdBu', color_continuous_midpoint=0, labels={'gap':'ギャップ (%ポイント)', 'domain':''}, title="+: 価値観 > 経験, -: 経験 > 価値観")
+                fig_bar.update_layout(yaxis={'categoryorder':'total ascending'}, title_x=0.5)
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("##### さらに、こんな詳細分析も可能です")
+        st.caption("各要素が互いにどう影響し合っているか、その隠れた関係性を可視化します。")
+        corr_df = df_sample[S_COLS].corr()
+        corr_df.fillna(0, inplace=True)
+        corr_df.columns = DOMAIN_NAMES_JP_VALUES
+        corr_df.index = DOMAIN_NAMES_JP_VALUES
         
-        with tab3_sample:
-            st.markdown("##### 相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
-            st.caption("あなたの幸福を構成する各要素が、互いにどう影響し合っているか、その隠れた関係性を可視化します。")
-            
-            corr_df = df_sample[S_COLS].corr()
-            corr_df.fillna(0, inplace=True)
-            corr_df.columns = DOMAIN_NAMES_JP_VALUES
-            corr_df.index = DOMAIN_NAMES_JP_VALUES
-            
-            fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1])
-            st.plotly_chart(fig_heatmap, use_container_width=True)
+        fig_heatmap = px.imshow(corr_df, text_auto=True, aspect="auto", color_continuous_scale='RdBu', range_color=[-1, 1], title="相関ヒートマップ：幸福の「相乗効果」と「トレードオフ」")
+        fig_heatmap.update_layout(title_x=0.5)
+        st.plotly_chart(fig_heatmap, use_container_width=True)
 def show_welcome_and_guide():
     st.header("ようこそ、Harmony Navigatorへ")
     st.subheader("あなたのための、内省支援ツール")
