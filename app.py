@@ -495,14 +495,13 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
         if df.empty:
             return df
         
-        # --- ▼▼▼ タイムスタンプ読み込み処理をシンプル化 ▼▼▼ ---
+        # --- ▼▼▼ 読み込み処理も書き込みに合わせて修正 ▼▼▼ ---
         if 'date' in df.columns:
-            # .dt.date を使わず、datetimeオブジェクトとして読み込む
-            df['date'] = pd.to_datetime(df['date'], errors='coerce') 
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
         if 'record_timestamp' in df.columns:
-             # utc=True を追加してタイムゾーンを統一
-             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce', utc=True)
-        # --- ▲▲▲ タイムスタンプ読み込み処理をシンプル化 ▲▲▲ ---
+             # 'YYYY-MM-DD HH:MM:SS' 形式の文字列をdatetimeオブジェクトとして読み込む
+             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+        # --- ▲▲▲ 読み込み処理も書き込みに合わせて修正 ▲▲▲ ---
 
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
         all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
@@ -528,27 +527,24 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         worksheet = sh.worksheet(sheet_name)
         
         df_copy = df.copy()
-        
-        # --- ▼▼▼ ここからがバグ修正の核心部分 ▼▼▼ ---
 
-        # 1. 'date' カラムを常に 'YYYY-MM-DD' 形式の文字列に変換
+        # --- ▼▼▼ ここがタイムスタンプ処理の最終修正案 ▼▼▼ ---
+        
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
-        # 2. 'record_timestamp' カラムを常にISO 8601形式の文字列に変換
         if 'record_timestamp' in df_copy.columns:
-            # まず、pandasのdatetimeオブジェクトに統一（タイムゾーン情報も考慮）
-            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce', utc=True)
+            # 1. どんな入力でも、まずpandasのdatetimeオブジェクトに統一
+            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
             
-            # datetimeオブジェクトを、gspreadが確実に解釈できるISO 8601形式の文字列にフォーマット
-            # .dt.strftime を使うことで、NaN（欠損値）はNaTとして扱われ、後の処理で空文字列になる
-            df_copy['record_timestamp'] = timestamps.dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            # 2. タイムゾーン情報を削除し、Google Sheetsが最も解釈しやすい 'YYYY-MM-DD HH:MM:SS' 形式の文字列に変換
+            #    .dt.tz_localize(None) でタイムゾーン情報を削除
+            df_copy['record_timestamp'] = timestamps.dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')
 
-        # --- ▲▲▲ ここまでがバグ修正の核心部分 ▲▲▲ ---
-        
+        # --- ▲▲▲ ここまでが最終修正案 ▲▲▲ ---
+
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
-            # （...既存のスキーマ定義は変更なし...）
             element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
             db_schema_cols = (
                 ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + 
@@ -562,7 +558,6 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
                 df_copy[col] = '' 
 
         df_to_write = df_copy[db_schema_cols]
-        # NaNやNaTを空文字列に置換し、全てを文字列型に統一
         df_to_write = df_to_write.fillna('').astype(str)
         
         worksheet.clear()
