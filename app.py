@@ -1213,6 +1213,9 @@ def main():
     if 'record_streak' not in st.session_state: st.session_state.record_streak = 0
     if 'unlocked_achievements' not in st.session_state: st.session_state.unlocked_achievements = set()
 
+    if 'record_mode' not in st.session_state: st.session_state.record_mode = "リセットモード"
+    if 'reset_triggered' not in st.session_state: st.session_state.reset_triggered = False
+
     auth_status = st.session_state.auth_status
 
     if auth_status in ["NOT_LOGGED_IN", "AWAITING_ID", "AWAITING_WIZARD", "AWAITING_DEMOGRAPHICS"]:
@@ -1571,35 +1574,38 @@ def main():
             container.markdown("##### 記録モード")
             input_mode = container.radio("記録モード:", ('🚀 クイック・ログ (ドメイン別評価)', '🔬 ディープ・ダイブ (詳細項目評価)'), horizontal=True)
             
+                        # --- ▼▼▼ ここからが大幅な修正箇所 ▼▼▼ ---
+
+            # フォームの外にリセットボタンを配置
+            if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）":
+                if container.button("🔄 全てのスライダーを中央値にリセット", key="reset_button"):
+                    st.session_state.reset_triggered = True
+                    st.rerun() # ページを再読み込みしてリセットを反映
+            
             with st.form(key='daily_input_form'):
                 s_element_values = {}
                 s_domain_values = {}
-
+                
                 # 前回値を引き継ぐための準備
                 latest_s_values = pd.Series(dtype=float)
-                if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）" and not user_data_df.empty:
-                    # タイムスタンプでソートして最新の記録を取得
+                # リセットがトリガーされていない場合のみ、前回値を読み込む
+                if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）" and not st.session_state.reset_triggered and not user_data_df.empty:
+                    # （...前回値を取得するロジックは変更なし...）
                     sortable_df = user_data_df.copy()
                     if 'record_timestamp' not in sortable_df.columns:
-                        sortable_df['record_timestamp'] = pd.to_datetime(sortable_df['date']) # 古いデータのためのフォールバック
+                        sortable_df['record_timestamp'] = pd.to_datetime(sortable_df['date'])
                     sortable_df.sort_values(by='record_timestamp', ascending=False, inplace=True)
-                    latest_s_values = sortable_df.iloc[0]
+                    if not sortable_df.empty:
+                        latest_s_values = sortable_df.iloc[0]
 
                 if 'クイック' in input_mode:
                     mode_string = 'quick'
                     st.info("今日一日を振り返り、7つの幸福の領域が、それぞれどれくらい満たされていたかを評価してください。")
                     
-                    # リセットボタン（継続モード時のみ表示）
-                    if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）":
-                        if st.button("🔄 全て中央値にリセット", key="reset_quick"):
-                            # st.rerun()は使わず、値を直接リセット
-                            latest_s_values = pd.Series(dtype=float) 
-
                     for domain in DOMAINS:
                         st.markdown(f"**{DOMAIN_NAMES_JP_DICT[domain]}**")
-                        # （...既存のexpanderはそのまま...）
+                        # （...expanderはそのまま...）
                         
-                        # デフォルト値を動的に設定
                         col_name = 's_' + domain
                         val = latest_s_values.get(col_name, 50)
                         default_val = 50 if pd.isna(val) else int(val)
@@ -1608,27 +1614,18 @@ def main():
                         st.caption(CAPTION_TEXT)
                 else: # ディープ・ダイブ
                     mode_string = 'deep'
-                    
-                    # リセットボタン（継続モード時のみ表示）
-                    if st.session_state.record_mode == "継続モード（前回値を引き継ぐ）":
-                        if st.button("🔄 全て中央値にリセット", key="reset_deep"):
-                            latest_s_values = pd.Series(dtype=float) 
-
                     col1, col2 = st.columns(2)
                     
                     for i, domain in enumerate(DOMAINS):
-                        container = col1 if i < 4 else col2
-                        with container:
+                        container_col = col1 if i < 4 else col2
+                        with container_col:
                             with st.expander(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", expanded=True):
                                 for element in LONG_ELEMENTS[domain]:
                                     col_name = f's_element_{element}'
-                                    
-                                    # デフォルト値を動的に設定
                                     val = latest_s_values.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
                                     
-                                    st.markdown(f"**{element}**")
-                                    st.caption(ELEMENT_DEFINITIONS.get(element, ""))
+                                    # （...elementのmarkdownとcaption...）
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
                                     st.caption(CAPTION_TEXT)
                                     s_element_values[col_name] = int(score)
