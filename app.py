@@ -1524,24 +1524,22 @@ def main():
                 
                 st.sidebar.markdown("---")
                 
-                # --- 【ここからが新しいフォームUI】 ---
+                # --- ▼▼▼ ここからインデントを修正したフォームブロック ▼▼▼ ---
+        
                 with st.sidebar.form("value_form"):
                     st.header('🧭 あなたの羅針盤を調整する')
                     
-                    # 1. ペルソナ選択による幸福スタイル診断
+                    # 1. ペルソナ選択
                     st.subheader("1. あなたの幸福スタイル診断")
-                    st.caption("まず、最も共感する「生き方の物語」を選んでみてください。これが、あなたの羅針盤の出発点になります。")
-        
+                    st.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
                     persona_options = {
-                        "バランスの取れた庭師": "庭全体の調和と日々の成長を大切にする。特定の大きな花よりも、全ての植物が健やかであることを願う。",
-                        "着実な登山家": "安全なルートを選び、リスクを避けながら着実に山頂を目指す。最高の景色よりも、無事に帰還できる安定した旅を重視する。",
-                        "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる。そのためなら、多少の危険や待ち時間は厭わない。",
+                        "バランスの取れた庭師": "庭全体の調和と日々の成長を大切にする...",
+                        "着実な登山家": "安全なルートを選び、リスクを避けながら着実に山頂を目指す...",
+                        "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる...",
                         "手動で調整": "これらの物語には当てはまらない。私は自分の手で全てのダイヤルを調整したい。"
                     }
-                    
                     if 'persona_choice' not in st.session_state:
                         st.session_state.persona_choice = "バランスの取れた庭師"
-        
                     selected_persona = st.radio(
                         "最も共感する物語は？",
                         options=list(persona_options.keys()),
@@ -1564,76 +1562,60 @@ def main():
                         st.session_state.gamma_value = preset['gamma']
                     
                     st.markdown("---")
-        
-                    # 2. 羅針盤の微調整
+                    # 2. 微調整
                     st.subheader("2. あなたの羅針盤の微調整")
                     st.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
-        
                     with st.expander("▼ スタイルのダイヤル", expanded=True):
+                        # (...alpha, lambda, gamma のスライダー...)
                         st.markdown("**幸福の哲学 (α)**")
-                        st.session_state.alpha_value = st.slider(
-                            "「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, st.session_state.alpha_value, 0.05, key="alpha_slider"
-                        )
+                        st.session_state.alpha_value = st.slider( "「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, st.session_state.alpha_value, 0.05, key="alpha_slider")
                         st.markdown("**安定性への感度 (λ)**")
-                        st.session_state.lambda_value = st.slider(
-                            "「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, st.session_state.lambda_value, 0.1, key="lambda_slider"
-                        )
+                        st.session_state.lambda_value = st.slider("「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, st.session_state.lambda_value, 0.1, key="lambda_slider")
                         st.markdown("**不調への耐性 (γ)**")
-                        st.session_state.gamma_value = st.slider(
-                            "「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, st.session_state.gamma_value, 0.1, key="gamma_slider"
-                        )
-        
+                        st.session_state.gamma_value = st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, st.session_state.gamma_value, 0.1, key="gamma_slider")
+                    
                     with st.expander("▼ 重要度のダイヤル", expanded=True):
+                        # (...q_t スライダーと合計値チェック...)
                         for domain in DOMAINS:
-                            st.session_state.q_values[domain] = st.slider(
-                                DOMAIN_NAMES_JP_DICT[domain], 0, 100, st.session_state.q_values.get(domain, 14), key=f"q_{domain}"
-                            )
+                            st.session_state.q_values[domain] = st.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, st.session_state.q_values.get(domain, 14), key=f"q_{domain}")
                         q_total = sum(st.session_state.q_values.values())
                         st.metric(label="現在の合計値", value=q_total)
                         if q_total != 100:
                             st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
                         else:
                             st.success("合計は100です。更新準備OK！")
-        
+                    
                     st.markdown("---")
                     submitted_values = st.form_submit_button('🧭 羅針盤を更新する', use_container_width=True)
         
                     if submitted_values:
+                        # (...保存ロジック...)
                         if q_total != 100:
                             st.error('価値観 (q_t) の合計が100になっていません。')
                         else:
-                            new_value_record = {
-                                'user_id': user_id,
-                                'date': date.today(),
-                                'record_timestamp': datetime.now(JST),
-                                'alpha': st.session_state.alpha_value,
-                                'lambda': st.session_state.lambda_value,
-                                'gamma': st.session_state.gamma_value
-                            }
+                            new_value_record = { 'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(JST), 'alpha': st.session_state.alpha_value, 'lambda': st.session_state.lambda_value, 'gamma': st.session_state.gamma_value }
                             new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
-                            
                             new_df_row = pd.DataFrame([new_value_record])
                             all_data_df_for_values = read_data('data', data_sheet_id)
                             all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
-        
-                            if 'date' in all_data_df_updated.columns:
-                                all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
-                            if 'record_timestamp' in all_data_df_updated.columns:
-                                all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce', utc=True)
+                            if 'date' in all_data_df_updated.columns: all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
+                            if 'record_timestamp' in all_data_df_updated.columns: all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce', utc=True)
                             all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
-        
                             if write_data('data', data_sheet_id, all_data_df_updated):
                                 st.success("あなたの羅針盤を更新しました！")
                                 st.balloons()
                                 time.sleep(1)
                                 st.rerun()
-                            else:
-                                st.error("価値観の保存に失敗しました。")
-
-        with st.sidebar:
-            st.markdown("---")
-            st.subheader("📜 法的情報")
-            show_legal_documents()
+                            else: st.error("価値観の保存に失敗しました。")
+                
+                # --- ▼▼▼ ここがインデント修正のポイント ▼▼▼ ---
+                # 法的情報のセクションは、フォームの外側、
+                # サイドバーの直接の子として配置する
+                st.sidebar.markdown("---")
+                with st.sidebar:
+                    st.subheader("📜 法的情報")
+                    show_legal_documents()
+                # --- ▲▲▲ ここまでがインデント修正のポイント ▲▲▲ ---
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
