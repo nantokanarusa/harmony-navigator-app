@@ -1581,11 +1581,19 @@ def main():
             st.markdown("**不調への耐性 (γ)**")
             st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
         
+        # --- ▼▼▼ ここからが不具合2の最終修正 ▼▼▼ ---
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
+
+            def update_q_values(domain):
+                st.session_state.q_values[domain] = st.session_state[f"q_slider_{domain}"]
+
             for domain in DOMAINS:
                 st.slider(
                     DOMAIN_NAMES_JP_DICT[domain], 0, 100,
-                    key=f"q_values_{domain}"
+                    value=st.session_state.q_values.get(domain, 100 // len(DOMAINS)),
+                    key=f"q_slider_{domain}",
+                    on_change=update_q_values,
+                    args=(domain,) # コールバックに関数名を渡す
                 )
             
             q_total = sum(st.session_state.q_values.values())
@@ -1594,6 +1602,7 @@ def main():
                 st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
             else:
                 st.success("合計は100です。更新準備OK！")
+        # --- ▲▲▲ ここまでが不具合2の最終修正 ▲▲▲ ---
 
         st.sidebar.markdown("---")
         
