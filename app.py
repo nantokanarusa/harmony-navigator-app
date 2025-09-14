@@ -1520,8 +1520,7 @@ def main():
             st.rerun()
 
         # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
-
-        # 1. 【移動】記録モード設定
+        
         st.sidebar.markdown("---")
         st.sidebar.subheader("🖋️ 記録設定")
         with st.sidebar.container(border=True):
@@ -1533,10 +1532,8 @@ def main():
             )
 
         st.sidebar.markdown("---")
-        
-        # 2. 羅針盤（価値観）調整機能
         st.sidebar.header('🧭 あなたの羅針盤を調整する')
-            
+
         st.sidebar.subheader("1. あなたの幸福スタイル診断")
         st.sidebar.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
         persona_options = {
@@ -1552,6 +1549,7 @@ def main():
             "情熱的なサーファー":   {'alpha': 0.8, 'lambda': 0.2, 'gamma': 0.5},
         }
 
+        # ペルソナが変更されたときにsession_stateを更新するコールバック関数
         def update_params_from_persona():
             persona = st.session_state.persona_selector
             if persona != "手動で調整":
@@ -1618,7 +1616,6 @@ def main():
                 all_data_df_for_values = read_data('data', data_sheet_id)
                 all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
                 
-                # 型統一とソート
                 if 'date' in all_data_df_updated.columns:
                     all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
                 if 'record_timestamp' in all_data_df_updated.columns:
@@ -1626,12 +1623,14 @@ def main():
                 all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
                 
                 if write_data('data', data_sheet_id, all_data_df_updated):
-                    st.sidebar.success("羅針盤を更新しました！")
+                    st.sidebar.success("あなたの羅針盤を更新しました！")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.sidebar.error("価値観の保存に失敗しました。")
+
+        # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
 
         # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
 
