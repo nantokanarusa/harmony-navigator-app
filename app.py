@@ -1610,11 +1610,10 @@ def main():
                 
                 # --- ▼▼▼ ここがインデント修正のポイント ▼▼▼ ---
                 # 法的情報のセクションは、フォームの外側、
-                # サイドバーの直接の子として配置する
+                # 区切り線と関数呼び出しを配置する
                 st.sidebar.markdown("---")
-                with st.sidebar:
-                    st.subheader("📜 法的情報")
-                    show_legal_documents()
+                st.subheader("📜 法的情報")
+                show_legal_documents()
                 # --- ▲▲▲ ここまでがインデント修正のポイント ▲▲▲ ---
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
