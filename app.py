@@ -1519,23 +1519,22 @@ def main():
                 del st.session_state[key]
             st.rerun()
 
-        # --- 4. 記録モードの復活 ---
+        # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
+
+        # 1. 【移動】記録モード設定
         st.sidebar.markdown("---")
         st.sidebar.subheader("🖋️ 記録設定")
         with st.sidebar.container(border=True):
-            
-            # --- ▼▼▼ このブロックを修正 ▼▼▼ ---
             st.session_state.record_mode = st.radio(
                 "スライダーの初期状態:",
                 ("リセットモード", "継続モード（前回値を引き継ぐ）"),
                 index=0 if st.session_state.record_mode == "リセットモード" else 1,
                 help="「リセットモード」は常に中央値から、「継続モード」は前回の記録値を引き継いで開始します。"
             )
-            # --- ▲▲▲ このブロックを修正 ▲▲▲ ---
+
         st.sidebar.markdown("---")
-
-        # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
-
+        
+        # 2. 羅針盤（価値観）調整機能
         st.sidebar.header('🧭 あなたの羅針盤を調整する')
             
         st.sidebar.subheader("1. あなたの幸福スタイル診断")
@@ -1574,16 +1573,11 @@ def main():
         st.sidebar.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
 
         with st.sidebar.expander("▼ スタイルのダイヤル", expanded=True):
-            st.markdown("**幸福の哲学 (α)**")
-            st.slider("「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, key="alpha_value")
-            st.markdown("**安定性への感度 (λ)**")
-            st.slider("「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, key="lambda_value")
-            st.markdown("**不調への耐性 (γ)**")
-            st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
+            st.slider("幸福の哲学 (α): 「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, key="alpha_value")
+            st.slider("安定性への感度 (λ): 「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, key="lambda_value")
+            st.slider("不調への耐性 (γ): 「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
         
-        # --- ▼▼▼ ここからが不具合2の最終修正 ▼▼▼ ---
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
-
             def update_q_values(domain):
                 st.session_state.q_values[domain] = st.session_state[f"q_slider_{domain}"]
 
@@ -1593,7 +1587,7 @@ def main():
                     value=st.session_state.q_values.get(domain, 100 // len(DOMAINS)),
                     key=f"q_slider_{domain}",
                     on_change=update_q_values,
-                    args=(domain,) # コールバックに関数名を渡す
+                    args=(domain,)
                 )
             
             q_total = sum(st.session_state.q_values.values())
@@ -1602,7 +1596,6 @@ def main():
                 st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
             else:
                 st.success("合計は100です。更新準備OK！")
-        # --- ▲▲▲ ここまでが不具合2の最終修正 ▲▲▲ ---
 
         st.sidebar.markdown("---")
         
@@ -1612,7 +1605,9 @@ def main():
                 st.sidebar.error('価値観 (q_t) の合計が100になっていません。')
             else:
                 new_value_record = {
-                    'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(),
+                    'user_id': user_id, 
+                    'date': date.today(), 
+                    'record_timestamp': datetime.now(),
                     'alpha': st.session_state.alpha_value,
                     'lambda': st.session_state.lambda_value,
                     'gamma': st.session_state.gamma_value
@@ -1623,14 +1618,23 @@ def main():
                 all_data_df_for_values = read_data('data', data_sheet_id)
                 all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
                 
+                # 型統一とソート
+                if 'date' in all_data_df_updated.columns:
+                    all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
+                if 'record_timestamp' in all_data_df_updated.columns:
+                    all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce')
+                all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
+                
                 if write_data('data', data_sheet_id, all_data_df_updated):
-                    st.sidebar.success("あなたの羅針盤を更新しました！")
+                    st.sidebar.success("羅針盤を更新しました！")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.sidebar.error("価値観の保存に失敗しました。")
-            )
+
+        # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
+
         # --- メインコンテンツのタブ定義 ---
         # (...以降のtab1, tab2, tab3の中身は、以前の修正内容で問題ありません...)
 
