@@ -1523,81 +1523,90 @@ def main():
                 del st.session_state[key]
             st.rerun()
         
-        # ... (サイドバーの残りの部分は変更なし) ...
         st.sidebar.markdown("---")
-
-        with st.sidebar:
-            st.subheader("🖋️ 記録設定")
-            with st.container(border=True):
-                st.session_state.record_mode = st.radio(
-                    "スライダーの初期状態:",
-                    ("リセットモード", "継続モード（前回値を引き継ぐ）"),
-                    index=0 if st.session_state.record_mode == "リセットモード" else 1,
-                    help="「リセットモード」は常に中央値から、「継続モード」は前回の記録値を引き継いで開始します。"
-                )
         
-        with st.sidebar:
-            st.subheader("🧭 あなたの羅針盤")
-            st.info("現在の価値観を見直したい場合は、いつでもここからガイドを開始できます。")
-            if st.button("🗺️ 価値観発見ガイドを始める", use_container_width=True):
-                st.session_state.auth_status = "AWAITING_WIZARD"
-                st.session_state.q_wizard_step = 1
-                st.session_state.q_comparisons = {}
-                st.rerun()
-            st.markdown("---")
-        
-        st.sidebar.header('🧭 あなたの羅針盤を調整する')
-
+        # --- 【改善案1, 2, 3を統合した新しいフォーム】 ---
         with st.sidebar.form("value_form"):
-            st.subheader("1. あなたの幸福スタイル (α)")
-            with st.expander("▼ これは、何？"):
-                st.markdown("""
-                あなたの幸福が、**「量（S: 満足の総量）」**と**「質（U: 価値観との一致）」**のどちらをより重視するか、そのバランス（α）を設定します。
-                ピンとこなければ、まずは自分に近いと感じるペルソナを選んでみてください。
-                """)
+            st.header('🧭 あなたの羅針盤を調整する')
             
-            persona = st.radio(
-                "最も共感するペルソナは？",
-                ["バランスの取れた庭師", "着実な登山家", "情熱的なサーファー", "手動で調整"],
-                horizontal=True, key="persona_selector"
-            )
+            # --- 1. ペルソナ選択による幸福スタイル診断 ---
+            st.subheader("1. あなたの幸福スタイル診断")
+            st.caption("まず、最も共感する「生き方の物語」を選んでみてください。これが、あなたの羅針盤の出発点になります。")
 
-            alpha_presets = {
-                "バランスの取れた庭師": 0.6,
-                "着実な登山家": 0.4,
-                "情熱的なサーファー": 0.8
+            persona_options = {
+                "バランスの取れた庭師": "庭全体の調和と日々の成長を大切にする。特定の大きな花よりも、全ての植物が健やかであることを願う。",
+                "着実な登山家": "安全なルートを選び、リスクを避けながら着実に山頂を目指す。最高の景色よりも、無事に帰還できる安定した旅を重視する。",
+                "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる。そのためなら、多少の危険や待ち時間は厭わない。",
+                "手動で調整": "これらの物語には当てはまらない。私は自分の手で全てのダイヤルを調整したい。"
             }
             
-            if persona != "手動で調整":
-                st.session_state.alpha_value = alpha_presets[persona]
-            
-            st.session_state.alpha_value = st.slider(
-                "幸福スタイル: 「質・調和」重視 ⇔ 「量」重視",
-                0.0, 1.0, st.session_state.alpha_value, 0.05,
-                key="alpha_slider"
+            # ユーザーの選択を保持するためのキー
+            if 'persona_choice' not in st.session_state:
+                st.session_state.persona_choice = "バランスの取れた庭師"
+
+            selected_persona = st.radio(
+                "最も共感する物語は？",
+                options=list(persona_options.keys()),
+                format_func=lambda key: f"**{key}**: {persona_options[key]}",
+                key="persona_selector",
+                index=list(persona_options.keys()).index(st.session_state.persona_choice)
             )
+            st.session_state.persona_choice = selected_persona
+            
+            # ペルソナに対応するプリセット値
+            persona_presets = {
+                "バランスの取れた庭師": {'alpha': 0.6, 'lambda': 0.5, 'gamma': 1.0},
+                "着実な登山家":       {'alpha': 0.4, 'lambda': 1.0, 'gamma': 1.5},
+                "情熱的なサーファー":   {'alpha': 0.8, 'lambda': 0.2, 'gamma': 0.5},
+            }
 
-            st.subheader("2. 各ドメインの重要度 (q_t)")
-            with st.expander("▼ これは、何？"):
-                st.markdown(EXPANDER_TEXTS['q_t'])
+            # ペルソナが「手動で調整」以外で選ばれた場合、セッション状態の値を更新
+            if selected_persona != "手動で調整":
+                preset = persona_presets[selected_persona]
+                st.session_state.alpha_value = preset['alpha']
+                st.session_state.lambda_value = preset['lambda']
+                st.session_state.gamma_value = preset['gamma']
+            
+            st.markdown("---")
 
-            for domain in DOMAINS:
-                st.session_state.q_values[domain] = st.slider(
-                    DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
-                    st.session_state.q_values.get(domain, 14), 
-                    key=f"q_{domain}"
+            # --- 2. 羅針盤の微調整 ---
+            st.subheader("2. あなたの羅針盤の微調整")
+            st.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
+
+            with st.expander("▼ スタイルのダイヤル"):
+                st.markdown("**幸福の哲学 (α)**")
+                st.caption("「量（満足の総量）」と「質（価値観との一致）」のどちらを重視しますか？")
+                st.session_state.alpha_value = st.slider(
+                    "「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, st.session_state.alpha_value, 0.05, key="alpha_slider"
                 )
 
-            q_total = sum(st.session_state.q_values.values())
-            st.metric(label="現在の合計値", value=q_total)
-            
-            # --- ▼▼▼ ここに抜けていた行を追記しました ▼▼▼ ---
-            if q_total != 100:
-                st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-            else:
-                st.sidebar.success("合計は100です。更新準備OK！")
-            # --- ▲▲▲ ここまでが追記箇所です ▲▲▲ ---
-            
+                st.markdown("**安定性への感度 (λ)**")
+                st.caption("日々の気分の「浮き沈み（変動）」を、どれだけ不快に感じますか？")
+                st.session_state.lambda_value = st.slider(
+                    "「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, st.session_state.lambda_value, 0.1, key="lambda_slider"
+                )
+                
+                st.markdown("**不調への耐性 (γ)**")
+                st.caption("「深刻な不調」に陥ることを、どれだけ避けたいですか？")
+                st.session_state.gamma_value = st.slider(
+                    "「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, st.session_state.gamma_value, 0.1, key="gamma_slider"
+                )
+
+            with st.expander("▼ 重要度のダイヤル"):
+                for domain in DOMAINS:
+                    st.session_state.q_values[domain] = st.slider(
+                        DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
+                        st.session_state.q_values.get(domain, 14), 
+                        key=f"q_{domain}"
+                    )
+                q_total = sum(st.session_state.q_values.values())
+                st.metric(label="現在の合計値", value=q_total)
+                if q_total != 100:
+                    st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+                else:
+                    st.success("合計は100です。更新準備OK！")
+
+            st.markdown("---")
             submitted_values = st.form_submit_button('🧭 羅針盤を更新する', use_container_width=True)
 
             if submitted_values:
