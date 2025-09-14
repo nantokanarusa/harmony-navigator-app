@@ -1522,69 +1522,77 @@ def main():
         
         st.sidebar.markdown("---")
         
+        # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
+        
+        # --- 【ペルソナ選択がスライダーに反映されるように修正】 ---
+        
+        # プリセット値を定義
+        persona_presets = {
+            "バランスの取れた庭師": {'alpha': 0.6, 'lambda': 0.5, 'gamma': 1.0},
+            "着実な登山家":       {'alpha': 0.4, 'lambda': 1.0, 'gamma': 1.5},
+            "情熱的なサーファー":   {'alpha': 0.8, 'lambda': 0.2, 'gamma': 0.5},
+        }
+
+        # コールバック関数を定義
+        def update_params_from_persona():
+            persona = st.session_state.persona_selector
+            if persona != "手動で調整":
+                preset = persona_presets[persona]
+                st.session_state.alpha_value = preset['alpha']
+                st.session_state.lambda_value = preset['lambda']
+                st.session_state.gamma_value = preset['gamma']
+
         with st.sidebar.form("value_form"):
             st.header('🧭 あなたの羅針盤を調整する')
             
             st.subheader("1. あなたの幸福スタイル診断")
             st.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
             persona_options = {
-                "バランスの取れた庭師": "庭全体の調和と日々の成長を大切にする。特定の大きな花よりも、全ての植物が健やかであることを願う。",
-                "着実な登山家": "安全なルートを選び、リスクを避けながら着実に山頂を目指す。最高の景色よりも、無事に帰還できる安定した旅を重視する。",
-                "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる。そのためなら、多少の危険や待ち時間は厭わない。",
+                "バランスの取れた庭師": "庭全体の調和と日々の成長を大切にする...",
+                "着実な登山家": "安全なルートを選び、リスクを避けながら着実に山頂を目指す...",
+                "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる...",
                 "手動で調整": "これらの物語には当てはまらない。私は自分の手で全てのダイヤルを調整したい。"
             }
-            if 'persona_choice' not in st.session_state:
-                st.session_state.persona_choice = "バランスの取れた庭師"
-            selected_persona = st.radio(
+            
+            # on_change引数にコールバック関数を指定
+            st.radio(
                 "最も共感する物語は？",
                 options=list(persona_options.keys()),
                 format_func=lambda key: f"**{key}**: {persona_options[key]}",
                 key="persona_selector",
-                index=list(persona_options.keys()).index(st.session_state.persona_choice)
+                on_change=update_params_from_persona 
             )
-            st.session_state.persona_choice = selected_persona
-            
-            persona_presets = {
-                "バランスの取れた庭師": {'alpha': 0.6, 'lambda': 0.5, 'gamma': 1.0},
-                "着実な登山家":       {'alpha': 0.4, 'lambda': 1.0, 'gamma': 1.5},
-                "情熱的なサーファー":   {'alpha': 0.8, 'lambda': 0.2, 'gamma': 0.5},
-            }
-            if selected_persona != "手動で調整":
-                preset = persona_presets[selected_persona]
-                st.session_state.alpha_value = preset['alpha']
-                st.session_state.lambda_value = preset['lambda']
-                st.session_state.gamma_value = preset['gamma']
             
             st.markdown("---")
             st.subheader("2. あなたの羅針盤の微調整")
             st.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
             with st.expander("▼ スタイルのダイヤル", expanded=True):
                 st.markdown("**幸福の哲学 (α)**")
-                st.session_state.alpha_value = st.slider( "「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, st.session_state.alpha_value, 0.05, key="alpha_slider")
+                st.slider("「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, key="alpha_value") # keyで直接session_stateを操作
                 st.markdown("**安定性への感度 (λ)**")
-                st.session_state.lambda_value = st.slider("「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, st.session_state.lambda_value, 0.1, key="lambda_slider")
+                st.slider("「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, key="lambda_value")
                 st.markdown("**不調への耐性 (γ)**")
-                st.session_state.gamma_value = st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, st.session_state.gamma_value, 0.1, key="gamma_slider")
+                st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
             
             with st.expander("▼ 重要度のダイヤル", expanded=True):
+                # (...q_tスライダーと合計値チェックは変更なし...)
                 for domain in DOMAINS:
-                    st.session_state.q_values[domain] = st.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, st.session_state.q_values.get(domain, 14), key=f"q_{domain}")
-                q_total = sum(st.session_state.q_values.values())
+                    st.slider(DOMAIN_NAMES_JP_DICT[domain], 0, 100, key=f"q_domain_{domain}") # keyを少し変更
+                q_total = sum([st.session_state.get(f"q_domain_{d}", 0) for d in DOMAINS])
                 st.metric(label="現在の合計値", value=q_total)
-                if q_total != 100:
-                    st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-                else:
-                    st.success("合計は100です。更新準備OK！")
+                if q_total != 100: st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+                else: st.success("合計は100です。更新準備OK！")
             
             st.markdown("---")
             submitted_values = st.form_submit_button('🧭 羅針盤を更新する', use_container_width=True)
 
             if submitted_values:
-                if q_total != 100:
-                    st.error('価値観 (q_t) の合計が100になっていません。')
+                # (...保存ロジックを、新しいsession_stateのキーに合わせて修正...)
+                if q_total != 100: st.error('価値観 (q_t) の合計が100になっていません。')
                 else:
                     new_value_record = { 'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(JST), 'alpha': st.session_state.alpha_value, 'lambda': st.session_state.lambda_value, 'gamma': st.session_state.gamma_value }
-                    new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+                    new_value_record.update({f'q_{d}': st.session_state.get(f"q_domain_{d}", 0) for d in DOMAINS})
+                    # (...以降の保存処理...)
                     new_df_row = pd.DataFrame([new_value_record])
                     all_data_df_for_values = read_data('data', data_sheet_id)
                     all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
@@ -1598,9 +1606,6 @@ def main():
                         st.rerun()
                     else: st.error("価値観の保存に失敗しました。")
 
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("📜 法的情報")
-        show_legal_documents()
 
         tab1, tab2, tab3 = st.tabs(["**✍️ 今日の記録**", "**📊 ダッシュボード**", "**🔧 設定とガイド**"])
 
@@ -2165,6 +2170,12 @@ def main():
             st.markdown("---")
             st.subheader("このアプリについて")
             show_welcome_and_guide()
+            
+            # --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+            st.markdown("---")
+            st.subheader("📜 法的情報")
+            show_legal_documents() # サイドバーからこちらに移動
+            # --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
         
 if __name__ == '__main__':
     main()
