@@ -1477,25 +1477,28 @@ def main():
         
         # --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
 
-        # タイムスタンプでソートして、最新の価値観設定を取得する
+        sortable_df = pd.DataFrame() # 空のデータフレームで初期化
         if 'record_timestamp' in user_data_df.columns:
-             # record_timestamp がNaTでない行のみを対象にする
             sortable_df = user_data_df.dropna(subset=['record_timestamp']).copy()
             sortable_df = sortable_df.sort_values(by='record_timestamp', ascending=False)
-        else:
-            sortable_df = pd.DataFrame() # タイムスタンプがない場合は空にする
-
-        # 最新のq_t設定を読み込む
+        
+        # 最新のq_t設定を読み込む（これは既存のままでOK）
         q_data_rows = sortable_df.dropna(subset=Q_COLS, how='all')
         if not q_data_rows.empty:
             latest_q_row = q_data_rows.iloc[0]
             latest_q_dict = latest_q_row[Q_COLS].to_dict()
             st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q_dict.items() if isinstance(val, (int, float)) and pd.notna(val)}
 
-        # 最新のalpha設定を読み込む
-        alpha_data_rows = sortable_df.dropna(subset=['alpha'])
-        if not alpha_data_rows.empty:
-            st.session_state.alpha_value = float(alpha_data_rows.iloc[0]['alpha'])
+        # 【堅牢なalpha読み込みロジック】
+        # 1. 'alpha'カラムが存在するかまずチェック
+        if 'alpha' in sortable_df.columns:
+            # 2. 'alpha'カラムが存在する場合のみ、NaNでない値を持つ行を探す
+            alpha_data_rows = sortable_df.dropna(subset=['alpha'])
+            if not alpha_data_rows.empty:
+                # 3. 見つかれば、その最新の値をセッション状態に設定
+                st.session_state.alpha_value = float(alpha_data_rows.iloc[0]['alpha'])
+        # 4. 'alpha'カラムが存在しない、または有効な値が一つもない場合は、
+        #    セッション状態は初期値（0.6）のままとなり、エラーは発生しない。
         
         # --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
 
