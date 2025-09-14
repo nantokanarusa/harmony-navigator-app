@@ -495,13 +495,12 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
         if df.empty:
             return df
         
-        # --- ▼▼▼ ここからが最終修正箇所 ▼▼▼ ---
+        # --- ▼▼▼ タイムゾーンなし（ナイーブ）に統一 ▼▼▼ ---
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
         if 'record_timestamp' in df.columns:
-             # format引数を削除し、utc=Trueを追加して書き込み側と処理を統一
-             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce', utc=True)
-        # --- ▲▲▲ ここまでが最終修正箇所 ▲▲▲ ---
+            df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce')
+        # --- ▲▲▲ タイムゾーンなし（ナイーブ）に統一 ▲▲▲ ---
 
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
         all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
@@ -511,7 +510,7 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df
-    except (gspread.exceptions.SpreadsheetNotFound, gspread.exceptions.WorksheetNotFound):
+    except (gspread.exceptions.SpreadsheetNotFound, g.exceptions.WorksheetNotFound):
         st.error(f"スプレッドシートまたはワークシート'{sheet_name}'が見つかりません。")
     except Exception as e:
         st.error(f"データの読み込み中にエラー: {e}")
@@ -528,21 +527,16 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         df_copy = df.copy()
 
-        # --- ▼▼▼ ここがタイムスタンプ処理の最終修正案 ▼▼▼ ---
-        
+        # --- ▼▼▼ タイムゾーンなし（ナイーブ）に統一 ▼▼▼ ---
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
-
         if 'record_timestamp' in df_copy.columns:
-            # 1. どんな入力でも、まずpandasのdatetimeオブジェクトに統一
-            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
-            
-            # 2. タイムゾーン情報を削除し、Google Sheetsが最も解釈しやすい 'YYYY-MM-DD HH:MM:SS' 形式の文字列に変換
-            #    .dt.tz_localize(None) でタイムゾーン情報を削除
-            df_copy['record_timestamp'] = timestamps.dt.tz_localize(None).dt.strftime('%Y-%m-%d %H:%M:%S')
+            # タイムゾーン情報を完全に削除して、シンプルな文字列に変換
+            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce').dt.tz_localize(None)
+            df_copy['record_timestamp'] = timestamps.dt.strftime('%Y-%m-%d %H:%M:%S')
+        # --- ▲▲▲ タイムゾーンなし（ナイーブ）に統一 ▲▲▲ ---
 
-        # --- ▲▲▲ ここまでが最終修正案 ▲▲▲ ---
-
+        # (...以降のスキーマ定義と書き込み処理は変更なし...)
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
             element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
@@ -556,7 +550,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         for col in db_schema_cols:
             if col not in df_copy.columns:
                 df_copy[col] = '' 
-
+        
         df_to_write = df_copy[db_schema_cols]
         df_to_write = df_to_write.fillna('').astype(str)
         
@@ -1600,7 +1594,7 @@ def main():
                 st.sidebar.error('価値観 (q_t) の合計が100になっていません。')
             else:
                 # (保存ロジックは変更なし)
-                new_value_record = { 'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(JST), 'alpha': st.session_state.alpha_value, 'lambda': st.session_state.lambda_value, 'gamma': st.session_state.gamma_value }
+                new_value_record = { 'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(), 'alpha': st.session_state.alpha_value, 'lambda': st.session_state.lambda_value, 'gamma': st.session_state.gamma_value }
                 new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
                 new_df_row = pd.DataFrame([new_value_record])
                 all_data_df_for_values = read_data('data', data_sheet_id)
