@@ -2045,7 +2045,36 @@ def main():
                     
                     # 全てのプロフィール項目を追加
                     age_group = st.selectbox("年代", options=DEMOGRAPHIC_OPTIONS['age_group'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['age_group'], current_profile.get('age_group')))
-                    gender = st.selectbox("性別", options=DEMOGRAPHIC_OPTIONS['gender'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender'], current_profile.get('gender')))
+                    # --- ▼▼▼ ここからが挿入する新しいブロック ▼▼▼ ---
+                    
+                    # 質問1: 性自認
+                    st.markdown("**1. あなたがご自身で認識している性別（ジェンダー・アイデンティティ）を教えてください。**")
+                    gender_identity = st.selectbox(
+                        "ジェンダー・アイデンティティ", 
+                        options=DEMOGRAPHIC_OPTIONS['gender_identity'], 
+                        index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender_identity'], current_profile.get('gender_identity')),
+                        label_visibility="collapsed"
+                    )
+        
+                    # 「その他（自由記述）」が選ばれた時だけ、テキスト入力欄を出す
+                    gender_identity_free_text = ""
+                    if gender_identity == 'その他（自由記述）':
+                        gender_identity_free_text = st.text_input(
+                            "よろしければ、ご自身の言葉でお聞かせください:", 
+                            key="gender_free_text_onboarding" # キーを重複させない
+                        )
+        
+                    # 質問2: 出生時の性別との相違
+                    st.markdown("**2. あなたが出生時に割り当てられた性別は、上で回答されたご自身の性自認と異なりますか？（任意）**")
+                    st.caption("この質問は、全ての人の多様な経験をより正確に理解し、尊重するために設けられています。")
+                    gender_assigned_at_birth_differs = st.selectbox(
+                        "出生時の性別との相違", 
+                        options=DEMOGRAPHIC_OPTIONS['gender_assigned_at_birth_differs'], 
+                        index=get_safe_index(DEMOGRAPHIC_OPTIONS['gender_assigned_at_birth_differs'], current_profile.get('gender_assigned_at_birth_differs')),
+                        label_visibility="collapsed"
+                    )
+        
+                    # --- ▲▲▲ ここまでが挿入する新しいブロック ▲▲▲ ---
                     occupation_category = st.selectbox("職業", options=DEMOGRAPHIC_OPTIONS['occupation_category'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['occupation_category'], current_profile.get('occupation_category')))
                     income_range = st.selectbox("年収", options=DEMOGRAPHIC_OPTIONS['income_range'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['income_range'], current_profile.get('income_range')))
                     marital_status = st.selectbox("婚姻状況", options=DEMOGRAPHIC_OPTIONS['marital_status'], index=get_safe_index(DEMOGRAPHIC_OPTIONS['marital_status'], current_profile.get('marital_status')))
@@ -2060,7 +2089,9 @@ def main():
                         users_df_update = read_data('users', users_sheet_id)
                         # 全てのプロフィール項目を更新
                         users_df_update.loc[users_df_update['user_id'] == user_id, 'age_group'] = age_group
-                        users_df_update.loc[users_df_update['user_id'] == user_id, 'gender'] = gender
+                        # ...このように2行に修正します
+                        users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'gender_identity'] = gender_identity if gender_identity != 'その他（自由記述）' else gender_identity_free_text
+                        users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'gender_assigned_at_birth_differs'] = gender_assigned_at_birth_differs
                         users_df_update.loc[users_df_update['user_id'] == user_id, 'occupation_category'] = occupation_category
                         users_df_update.loc[users_df_update['user_id'] == user_id, 'income_range'] = income_range
                         users_df_update.loc[users_df_update['user_id'] == user_id, 'marital_status'] = marital_status
