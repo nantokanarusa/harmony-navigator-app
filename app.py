@@ -1212,7 +1212,9 @@ def main():
     if 'q_comparisons' not in st.session_state: st.session_state.q_comparisons = {}
     if 'record_streak' not in st.session_state: st.session_state.record_streak = 0
     if 'unlocked_achievements' not in st.session_state: st.session_state.unlocked_achievements = set()
-
+    # --- ▼▼▼ ここから追加 ▼▼▼ ---
+    if 'alpha_value' not in st.session_state: st.session_state.alpha_value = 0.6 # デフォルト値
+    # --- ▲▲▲ ここまで追加 ▲▲▲ ---
     if 'record_mode' not in st.session_state: st.session_state.record_mode = "リセットモード"
     if 'reset_triggered' not in st.session_state: st.session_state.reset_triggered = False
 
@@ -1473,19 +1475,30 @@ def main():
         all_data_df = read_data('data', data_sheet_id)
         user_data_df = all_data_df[all_data_df['user_id'] == user_id].copy()
         
-        if 'record_timestamp' in user_data_df.columns:
-            user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['record_timestamp'], errors='coerce')
-        else: 
-             user_data_df['record_timestamp'] = pd.to_datetime(user_data_df['date'])
+        # --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
 
-        q_data_rows = user_data_df.dropna(subset=Q_COLS, how='all')
-        
+        # タイムスタンプでソートして、最新の価値観設定を取得する
+        if 'record_timestamp' in user_data_df.columns:
+             # record_timestamp がNaTでない行のみを対象にする
+            sortable_df = user_data_df.dropna(subset=['record_timestamp']).copy()
+            sortable_df = sortable_df.sort_values(by='record_timestamp', ascending=False)
+        else:
+            sortable_df = pd.DataFrame() # タイムスタンプがない場合は空にする
+
+        # 最新のq_t設定を読み込む
+        q_data_rows = sortable_df.dropna(subset=Q_COLS, how='all')
         if not q_data_rows.empty:
-            latest_q_row = q_data_rows.sort_values(by='record_timestamp', ascending=False).iloc[0]
-            
+            latest_q_row = q_data_rows.iloc[0]
             latest_q_dict = latest_q_row[Q_COLS].to_dict()
             st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q_dict.items() if isinstance(val, (int, float)) and pd.notna(val)}
+
+        # 最新のalpha設定を読み込む
+        alpha_data_rows = sortable_df.dropna(subset=['alpha'])
+        if not alpha_data_rows.empty:
+            st.session_state.alpha_value = float(alpha_data_rows.iloc[0]['alpha'])
         
+        # --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
+
         st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
         st.rerun()
 
@@ -1530,23 +1543,91 @@ def main():
                 st.rerun()
             st.markdown("---")
         
-        st.sidebar.header('⚙️ 価値観 (q_t) の手動調整')
-        with st.sidebar.expander("▼ これは、何のために設定するの？"):
-            st.markdown(EXPANDER_TEXTS['q_t'])
-        
-        for domain in DOMAINS:
-            st.session_state.q_values[domain] = st.sidebar.slider(
-                DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
-                st.session_state.q_values.get(domain, 14), 
-                key=f"q_{domain}"
+        st.sidebar.header('🧭 あなたの羅針盤を調整する')
+
+        with st.sidebar.form("value_form"):
+            st.subheader("1. あなたの幸福スタイル (α)")
+            with st.expander("▼ これは、何？"):
+                st.markdown("""
+                あなたの幸福が、**「量（S: 満足の総量）」**と**「質（U: 価値観との一致）」**のどちらをより重視するか、そのバランス（α）を設定します。
+                ピンとこなければ、まずは自分に近いと感じるペルソナを選んでみてください。
+                """)
+            
+            persona = st.radio(
+                "最も共感するペルソナは？",
+                ["バランスの取れた庭師", "着実な登山家", "情熱的なサーファー", "手動で調整"],
+                horizontal=True, key="persona_selector"
             )
 
-        q_total = sum(st.session_state.q_values.values())
-        st.sidebar.metric(label="現在の合計値", value=q_total)
-        if q_total != 100:
-            st.sidebar.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-        else:
-            st.sidebar.success("合計は100です。入力準備OK！")
+            alpha_presets = {
+                "バランスの取れた庭師": 0.6,
+                "着実な登山家": 0.4,
+                "情熱的なサーファー": 0.8
+            }
+            
+            if persona != "手動で調整":
+                st.session_state.alpha_value = alpha_presets[persona]
+            
+            st.session_state.alpha_value = st.slider(
+                "幸福スタイル: 「質・調和」重視 ⇔ 「量」重視",
+                0.0, 1.0, st.session_state.alpha_value, 0.05,
+                key="alpha_slider"
+            )
+
+            st.subheader("2. 各ドメインの重要度 (q_t)")
+            with st.expander("▼ これは、何？"):
+                st.markdown(EXPANDER_TEXTS['q_t'])
+
+            for domain in DOMAINS:
+                st.session_state.q_values[domain] = st.slider(
+                    DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
+                    st.session_state.q_values.get(domain, 14), 
+                    key=f"q_{domain}"
+                )
+
+            q_total = sum(st.session_state.q_values.values())
+            st.metric(label="現在の合計値", value=q_total)
+            
+            # --- ▼▼▼ ここに抜けていた行を追記しました ▼▼▼ ---
+            if q_total != 100:
+                st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
+            else:
+                st.sidebar.success("合計は100です。更新準備OK！")
+            # --- ▲▲▲ ここまでが追記箇所です ▲▲▲ ---
+            
+            submitted_values = st.form_submit_button('🧭 羅針盤を更新する', use_container_width=True)
+
+            if submitted_values:
+                if q_total != 100:
+                    st.error('価値観 (q_t) の合計が100になっていません。')
+                else:
+                    # (...以降の保存ロジックは変更なし...)
+                    new_value_record = {
+                        'user_id': user_id,
+                        'date': date.today(),
+                        'record_timestamp': datetime.now(JST),
+                        'alpha': st.session_state.alpha_value
+                    }
+                    new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+                    
+                    new_df_row = pd.DataFrame([new_value_record])
+                    all_data_df_for_values = read_data('data', data_sheet_id)
+                    all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
+
+                    if 'date' in all_data_df_updated.columns:
+                        all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
+                    if 'record_timestamp' in all_data_df_updated.columns:
+                        all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce', utc=True)
+                    
+                    all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
+
+                    if write_data('data', data_sheet_id, all_data_df_updated):
+                        st.success("あなたの羅針盤を更新しました！")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("価値観の保存に失敗しました。")
 
         with st.sidebar:
             st.markdown("---")
@@ -1732,7 +1813,9 @@ def main():
                     if df_to_process.dropna(subset=Q_COLS, how='all').empty:
                         st.info('まだ記録がありません。まずは「今日の記録」タブから、最初の日誌を記録してみましょう！')
                     else:
-                        df_processed = calculate_metrics(df_to_process, alpha=0.6)
+                        # --- ▼▼▼ ここを修正 ▼▼▼ ---
+                        df_processed = calculate_metrics(df_to_process, alpha=st.session_state.alpha_value)
+                        # --- ▲▲▲ ここを修正 ▲▲▲ ---
                         if 'date' in df_processed.columns:
                             df_processed['date'] = pd.to_datetime(df_processed['date'])
                             df_processed = df_processed.sort_values('date')
