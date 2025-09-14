@@ -1518,14 +1518,23 @@ def main():
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
+
+        # --- 4. 記録モードの復活 ---
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🖋️ 記録設定")
+        with st.sidebar.container(border=True):
+            st.session_state.record_mode = st.radio(
+                "スライダーの初期状態:",
+                ("リセットモード", "継続モード（前回値を引き継ぐ）"),
+                index=0 if st.session_state.record_mode == "リセットモード" else 1,
+                help="「リセットモード」は常に中央値から、「継続モード」は前回の記録値を引き継いで開始します。"
         
         st.sidebar.markdown("---")
 
         # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
 
-        st.sidebar.header('🧭 あなたの羅-針盤を調整する')
-
-        # --- 1. ペルソナ選択による幸福スタイル診断 ---
+        st.sidebar.header('🧭 あなたの羅針盤を調整する')
+            
         st.sidebar.subheader("1. あなたの幸福スタイル診断")
         st.sidebar.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
         persona_options = {
@@ -1558,8 +1567,6 @@ def main():
         )
         
         st.sidebar.markdown("---")
-
-        # --- 2. 羅針盤の微調整 ---
         st.sidebar.subheader("2. あなたの羅針盤の微調整")
         st.sidebar.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
 
@@ -1572,63 +1579,45 @@ def main():
             st.slider("「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
         
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
-            # --- ▼▼▼ ここからが不具合2の修正 ▼▼▼ ---
-            current_q_values = st.session_state.q_values.copy()
             for domain in DOMAINS:
-                # keyをsession_stateの辞書とは別の名前にする
-                current_q_values[domain] = st.slider(
-                    DOMAIN_NAMES_JP_DICT[domain], 0, 100, 
-                    value=current_q_values.get(domain, 100 // len(DOMAINS)),
-                    key=f"q_slider_{domain}" 
+                st.slider(
+                    DOMAIN_NAMES_JP_DICT[domain], 0, 100,
+                    key=f"q_values_{domain}"
                 )
             
-            q_total = sum(current_q_values.values())
-            # --- ▲▲▲ ここまでが不具合2の修正 ▲▲▲ ---
-            
+            q_total = sum(st.session_state.q_values.values())
             st.metric(label="現在の合計値", value=q_total)
             if q_total != 100:
                 st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
             else:
                 st.success("合計は100です。更新準備OK！")
-                
+
         st.sidebar.markdown("---")
         
-        # --- 3. 保存ボタン ---
         if st.sidebar.button('🧭 羅針盤を更新・保存する', use_container_width=True):
-            # スライダーの現在の値を取得してsession_stateに反映
-            st.session_state.q_values = {d: st.session_state[f"q_slider_{d}"] for d in DOMAINS}
             q_total_final = sum(st.session_state.q_values.values())
-            
             if q_total_final != 100:
                 st.sidebar.error('価値観 (q_t) の合計が100になっていません。')
             else:
-                # (保存ロジックは変更なし)
-                new_value_record = { 'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(), 'alpha': st.session_state.alpha_value, 'lambda': st.session_state.lambda_value, 'gamma': st.session_state.gamma_value }
+                new_value_record = {
+                    'user_id': user_id, 'date': date.today(), 'record_timestamp': datetime.now(),
+                    'alpha': st.session_state.alpha_value,
+                    'lambda': st.session_state.lambda_value,
+                    'gamma': st.session_state.gamma_value
+                }
                 new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+                
                 new_df_row = pd.DataFrame([new_value_record])
                 all_data_df_for_values = read_data('data', data_sheet_id)
                 all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
-                if 'date' in all_data_df_updated.columns: all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
-                if 'record_timestamp' in all_data_df_updated.columns: all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce', utc=True)
-                all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
                 
                 if write_data('data', data_sheet_id, all_data_df_updated):
-                    st.sidebar.success("羅針盤を更新しました！")
+                    st.sidebar.success("あなたの羅針盤を更新しました！")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.sidebar.error("価値観の保存に失敗しました。")
-        
-        # --- 4. 記録モードの復活 ---
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🖋️ 記録設定")
-        with st.sidebar.container(border=True):
-            st.session_state.record_mode = st.radio(
-                "スライダーの初期状態:",
-                ("リセットモード", "継続モード（前回値を引き継ぐ）"),
-                index=0 if st.session_state.record_mode == "リセットモード" else 1,
-                help="「リセットモード」は常に中央値から、「継続モード」は前回の記録値を引き継いで開始します。"
             )
         # --- メインコンテンツのタブ定義 ---
         # (...以降のtab1, tab2, tab3の中身は、以前の修正内容で問題ありません...)
