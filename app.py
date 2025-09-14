@@ -525,59 +525,26 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
         
         df_copy = df.copy()
         
+        # --- ▼▼▼ ここからがバグ修正の核心部分 ▼▼▼ ---
+
+        # 1. 'date' カラムを常に 'YYYY-MM-DD' 形式の文字列に変換
         if 'date' in df_copy.columns:
             df_copy['date'] = pd.to_datetime(df_copy['date'], errors='coerce').dt.strftime('%Y-%m-%d')
 
+        # 2. 'record_timestamp' カラムを常にISO 8601形式の文字列に変換
         if 'record_timestamp' in df_copy.columns:
-            # Attempt to coerce column to datetimes. This yields a Series.
-            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce')
+            # まず、pandasのdatetimeオブジェクトに統一（タイムゾーン情報も考慮）
+            timestamps = pd.to_datetime(df_copy['record_timestamp'], errors='coerce', utc=True)
+            
+            # datetimeオブジェクトを、gspreadが確実に解釈できるISO 8601形式の文字列にフォーマット
+            # .dt.strftime を使うことで、NaN（欠損値）はNaTとして扱われ、後の処理で空文字列になる
+            df_copy['record_timestamp'] = timestamps.dt.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
-            try:
-                # Use the dtype of the Series for robust detection
-                if pd.api.types.is_datetime64_any_dtype(timestamps.dtype):
-                    # If timezone-aware, convert to UTC and then remove tz for consistent storage
-                    try:
-                        # timestamps.dt.tz might not exist for some pandas versions; use getattr safely
-                        if getattr(timestamps.dt, 'tz', None) is not None:
-                            # Convert to UTC then drop tz info
-                            timestamps = timestamps.dt.tz_convert('UTC').dt.tz_localize(None)
-                        # Format as ISO with trailing Z to indicate UTC when possible
-                        df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() + 'Z' if pd.notna(x) else '')
-                    except Exception:
-                        # Fallback: try simple isoformat if .dt access fails
-                        df_copy['record_timestamp'] = timestamps.apply(lambda x: x.isoformat() if pd.notna(x) else '')
-                else:
-                    # Fallback: handle object-dtype entries (python datetimes or strings)
-                    def _to_iso(val):
-                        try:
-                            if pd.isna(val):
-                                return ''
-                            ts = pd.to_datetime(val, errors='coerce')
-                            if pd.isna(ts):
-                                return ''
-                            # If tz-aware, convert to UTC then produce ISO + 'Z'
-                            if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
-                                try:
-                                    # pandas Timestamp may need tz_convert; try to normalize to UTC
-                                    ts_utc = ts.tz_convert('UTC') if hasattr(ts, 'tz_convert') else ts
-                                    # remove tzinfo for consistent formatting
-                                    try:
-                                        ts_utc = ts_utc.tz_localize(None)
-                                    except Exception:
-                                        pass
-                                    return ts_utc.isoformat() + 'Z'
-                                except Exception:
-                                    pass
-                            return ts.isoformat()
-                        except Exception:
-                            return ''
-                    df_copy['record_timestamp'] = df_copy['record_timestamp'].apply(_to_iso)
-            except Exception:
-                # Ensure column exists and is safe to write if anything unexpected occurs
-                df_copy['record_timestamp'] = df_copy['record_timestamp'].apply(lambda x: '' if pd.isna(x) else str(x))
-
+        # --- ▲▲▲ ここまでがバグ修正の核心部分 ▲▲▲ ---
+        
         db_schema_cols = ['user_id', 'password_hash', 'consent'] + list(DEMOGRAPHIC_OPTIONS.keys())
         if sheet_name == 'data':
+            # （...既存のスキーマ定義は変更なし...）
             element_cols_ordered = [f's_element_{e}' for domain_key in DOMAINS for e in LONG_ELEMENTS[domain_key]]
             db_schema_cols = (
                 ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + 
@@ -591,6 +558,7 @@ def write_data(sheet_name: str, spreadsheet_id: str, df: pd.DataFrame) -> bool:
                 df_copy[col] = '' 
 
         df_to_write = df_copy[db_schema_cols]
+        # NaNやNaTを空文字列に置換し、全てを文字列型に統一
         df_to_write = df_to_write.fillna('').astype(str)
         
         worksheet.clear()
