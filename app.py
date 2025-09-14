@@ -495,10 +495,14 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
         if df.empty:
             return df
         
+        # --- ▼▼▼ タイムスタンプ読み込み処理をシンプル化 ▼▼▼ ---
         if 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
+            # .dt.date を使わず、datetimeオブジェクトとして読み込む
+            df['date'] = pd.to_datetime(df['date'], errors='coerce') 
         if 'record_timestamp' in df.columns:
-             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce')
+             # utc=True を追加してタイムゾーンを統一
+             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce', utc=True)
+        # --- ▲▲▲ タイムスタンプ読み込み処理をシンプル化 ▲▲▲ ---
 
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
         all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
@@ -921,7 +925,7 @@ def get_safe_index(options, value):
 def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> pd.DataFrame:
     """
     ユーザーデータを読み込み、最新のスキーマに準拠しているか確認・修正する。
-    修正があった場合は、データベースに書き戻して永続化する。
+    （擬似タイムスタンプ生成機能は削除）
     """
     EXPECTED_COLUMNS = ['user_id', 'date', 'record_timestamp', 'consent', 'mode'] + Q_COLS + S_COLS + ['g_happiness', 'event_log'] + ALL_ELEMENT_COLS
     
@@ -935,17 +939,9 @@ def migrate_and_ensure_schema(df: pd.DataFrame, user_id: str, sheet_id: str) -> 
             df_migrated[col] = pd.NA
         made_changes = True
 
-    if 'record_timestamp' in df_migrated.columns:
-        df_migrated['record_timestamp'] = pd.to_datetime(df_migrated['record_timestamp'], errors='coerce')
-        missing_timestamp_mask = df_migrated['record_timestamp'].isna()
-        
-        date_as_datetime = pd.to_datetime(df_migrated['date'], errors='coerce')
-
-        if missing_timestamp_mask.any():
-            st.info("古い記録にタイムスタンプを付与しています...")
-            pseudo_timestamps = date_as_datetime[missing_timestamp_mask].apply(lambda x: pd.Timestamp(x, tz=JST) if pd.notna(x) else pd.NaT)
-            df_migrated.loc[missing_timestamp_mask, 'record_timestamp'] = pseudo_timestamps
-            made_changes = True
+    # 擬似タイムスタンプを生成していたロジックを完全に削除
+    # if 'record_timestamp' in df_migrated.columns:
+    #     ... (このブロック全体を削除)
 
     if made_changes:
         st.info("データベースを最新の形式に更新しています...")
