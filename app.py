@@ -1142,7 +1142,8 @@ def run_demographics_interface(container):
                 users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'age_group'] = age_group
                 # ...このように2行に修正します
                 users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'gender_identity'] = gender_identity if gender_identity != 'その他（自由記述）' else gender_identity_free_text
-                users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'gender_assigned_at_birth_differs'] = gender_assigned_at_birth_differs                users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'occupation_category'] = occupation_category
+                users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'gender_assigned_at_birth_differs'] = gender_assigned_at_birth_differs
+                users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'occupation_category'] = occupation_category
                 users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'income_range'] = income_range
                 users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'marital_status'] = marital_status
                 users_df_update.loc[users_df_update['user_id'] == st.session_state.user_id, 'has_children'] = has_children
