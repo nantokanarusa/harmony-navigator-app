@@ -495,13 +495,13 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
         if df.empty:
             return df
         
-        # --- ▼▼▼ 読み込み処理も書き込みに合わせて修正 ▼▼▼ ---
+        # --- ▼▼▼ ここからが最終修正箇所 ▼▼▼ ---
         if 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'], errors='coerce')
         if 'record_timestamp' in df.columns:
-             # 'YYYY-MM-DD HH:MM:SS' 形式の文字列をdatetimeオブジェクトとして読み込む
-             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
-        # --- ▲▲▲ 読み込み処理も書き込みに合わせて修正 ▲▲▲ ---
+             # format引数を削除し、utc=Trueを追加して書き込み側と処理を統一
+             df['record_timestamp'] = pd.to_datetime(df['record_timestamp'], errors='coerce', utc=True)
+        # --- ▲▲▲ ここまでが最終修正箇所 ▲▲▲ ---
 
         demographic_cols = list(DEMOGRAPHIC_OPTIONS.keys())
         all_cols_to_process = Q_COLS + S_COLS + ALL_ELEMENT_COLS + ['g_happiness'] + demographic_cols
