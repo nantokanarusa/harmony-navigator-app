@@ -1519,8 +1519,6 @@ def main():
                 del st.session_state[key]
             st.rerun()
 
-        # --- ▼▼▼ ここからが置き換え後のコード ▼▼▼ ---
-        
         st.sidebar.markdown("---")
         st.sidebar.subheader("🖋️ 記録設定")
         with st.sidebar.container(border=True):
@@ -1533,7 +1531,8 @@ def main():
 
         st.sidebar.markdown("---")
         st.sidebar.header('🧭 あなたの羅針盤を調整する')
-
+            
+        # --- 1. ペルソナ選択 ---
         st.sidebar.subheader("1. あなたの幸福スタイル診断")
         st.sidebar.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
         persona_options = {
@@ -1542,14 +1541,12 @@ def main():
             "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる...",
             "手動で調整": "これらの物語には当てはまらない。私は自分の手で全てのダイヤルを調整したい。"
         }
-        
         persona_presets = {
             "バランスの取れた庭師": {'alpha': 0.6, 'lambda': 0.5, 'gamma': 1.0},
             "着実な登山家":       {'alpha': 0.4, 'lambda': 1.0, 'gamma': 1.5},
             "情熱的なサーファー":   {'alpha': 0.8, 'lambda': 0.2, 'gamma': 0.5},
         }
 
-        # ペルソナが変更されたときにsession_stateを更新するコールバック関数
         def update_params_from_persona():
             persona = st.session_state.persona_selector
             if persona != "手動で調整":
@@ -1567,15 +1564,35 @@ def main():
         )
         
         st.sidebar.markdown("---")
+
+        # --- 2. 羅針盤の微調整 ---
         st.sidebar.subheader("2. あなたの羅針盤の微調整")
         st.sidebar.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
 
         with st.sidebar.expander("▼ スタイルのダイヤル", expanded=True):
-            st.slider("幸福の哲学 (α): 「質・調和」重視 ⇔ 「量」重視", 0.0, 1.0, key="alpha_value")
-            st.slider("安定性への感度 (λ): 「変動・刺激」を許容 ⇔ 「安定・平穏」を重視", 0.0, 2.0, key="lambda_value")
-            st.slider("不調への耐性 (γ): 「大きな成功」のためなら許容 ⇔ 「不調の回避」を最優先", 0.0, 2.0, key="gamma_value")
+            st.markdown("**幸福の哲学 (α)**")
+            st.caption("あなたの幸福は、**量（満足の総量）**と**質（価値観との一致）**のどちらをより重視しますか？")
+            col1, col2 = st.columns([1, 5, 1])
+            col1.caption("質重視")
+            col2.slider("alpha_slider", 0.0, 1.0, label_visibility="collapsed", key="alpha_value")
+            col3.caption("量重視")
+
+            st.markdown("**安定性への感度 (λ)**")
+            st.caption("日々の気分の**「浮き沈み（変動）」**を、どれだけ不快に感じますか？")
+            col1, col2, col3 = st.columns([1, 5, 1])
+            col1.caption("許容")
+            col2.slider("lambda_slider", 0.0, 2.0, label_visibility="collapsed", key="lambda_value")
+            col3.caption("重視")
+            
+            st.markdown("**不調への耐性 (γ)**")
+            st.caption("**「深刻な不調」**に陥ることを、どれだけ避けたいですか？")
+            col1, col2, col3 = st.columns([1, 5, 1])
+            col1.caption("許容")
+            col2.slider("gamma_slider", 0.0, 2.0, label_visibility="collapsed", key="gamma_value")
+            col3.caption("最優先")
         
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
+            # q_values辞書を更新するためのコールバック
             def update_q_values(domain):
                 st.session_state.q_values[domain] = st.session_state[f"q_slider_{domain}"]
 
@@ -1597,11 +1614,13 @@ def main():
 
         st.sidebar.markdown("---")
         
+        # --- 3. 保存ボタン ---
         if st.sidebar.button('🧭 羅針盤を更新・保存する', use_container_width=True):
             q_total_final = sum(st.session_state.q_values.values())
             if q_total_final != 100:
                 st.sidebar.error('価値観 (q_t) の合計が100になっていません。')
             else:
+                # 保存ロジック
                 new_value_record = {
                     'user_id': user_id, 
                     'date': date.today(), 
@@ -1623,17 +1642,13 @@ def main():
                 all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
                 
                 if write_data('data', data_sheet_id, all_data_df_updated):
-                    st.sidebar.success("あなたの羅針盤を更新しました！")
+                    st.sidebar.success("羅針盤を更新しました！")
                     st.balloons()
                     time.sleep(1)
                     st.rerun()
                 else:
                     st.sidebar.error("価値観の保存に失敗しました。")
-
         # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
-
-        # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
-
         # --- メインコンテンツのタブ定義 ---
         # (...以降のtab1, tab2, tab3の中身は、以前の修正内容で問題ありません...)
 
