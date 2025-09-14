@@ -1604,7 +1604,12 @@ def main():
                     
                     for domain in DOMAINS:
                         st.markdown(f"**{DOMAIN_NAMES_JP_DICT[domain]}**")
-                        # （...expanderはそのまま...）
+                        
+                        # --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+                        with st.expander("▼ このドメインには、どんな「材料」が含まれる？"):
+                            for element in LONG_ELEMENTS[domain]:
+                                st.markdown(f"- **{element}**: {ELEMENT_DEFINITIONS.get(element, '')}")
+                        # --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
                         
                         col_name = 's_' + domain
                         val = latest_s_values.get(col_name, 50)
@@ -1617,7 +1622,7 @@ def main():
                     col1, col2 = st.columns(2)
                     
                     for i, domain in enumerate(DOMAINS):
-                        container_col = col1 if i < 4 else col2
+                        container_col = col1 if i < 4 else col2 # この行は既存
                         with container_col:
                             with st.expander(f"**{DOMAIN_NAMES_JP_DICT[domain]}**", expanded=True):
                                 for element in LONG_ELEMENTS[domain]:
@@ -1625,7 +1630,8 @@ def main():
                                     val = latest_s_values.get(col_name, 50)
                                     default_val = 50 if pd.isna(val) else int(val)
                                     
-                                    # （...elementのmarkdownとcaption...）
+                                    st.markdown(f"**{element}**")
+                                    st.caption(ELEMENT_DEFINITIONS.get(element, ""))
                                     score = st.slider(label=f"slider_{col_name}", min_value=0, max_value=100, value=default_val, key=col_name, label_visibility="collapsed")
                                     st.caption(CAPTION_TEXT)
                                     s_element_values[col_name] = int(score)
