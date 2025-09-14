@@ -510,7 +510,7 @@ def read_data(sheet_name: str, spreadsheet_id: str) -> pd.DataFrame:
                  df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df
-    except (gspread.exceptions.SpreadsheetNotFound, g.exceptions.WorksheetNotFound):
+    except (gspread.exceptions.SpreadsheetNotFound, gspread.exceptions.WorksheetNotFound):
         st.error(f"スプレッドシートまたはワークシート'{sheet_name}'が見つかりません。")
     except Exception as e:
         st.error(f"データの読み込み中にエラー: {e}")
