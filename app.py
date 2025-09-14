@@ -1572,23 +1572,35 @@ def main():
         with st.sidebar.expander("▼ スタイルのダイヤル", expanded=True):
             st.markdown("**幸福の哲学 (α)**")
             st.caption("あなたの幸福は、**量（満足の総量）**と**質（価値観との一致）**のどちらをより重視しますか？")
-            col1, col2 = st.columns([1, 5, 1])
+            
+            # --- ▼▼▼ ここを修正 ▼▼▼ ---
+            col1, col2, col3 = st.columns([1, 5, 1])
+            # --- ▲▲▲ ここを修正 ▲▲▲ ---
+            
             col1.caption("質重視")
             col2.slider("alpha_slider", 0.0, 1.0, label_visibility="collapsed", key="alpha_value")
             col3.caption("量重視")
 
             st.markdown("**安定性への感度 (λ)**")
             st.caption("日々の気分の**「浮き沈み（変動）」**を、どれだけ不快に感じますか？")
+
+            # --- ▼▼▼ ここを修正 ▼▼▼ ---
             col1, col2, col3 = st.columns([1, 5, 1])
+            # --- ▲▲▲ ここを修正 ▲▲▲ ---
+
             col1.caption("許容")
             col2.slider("lambda_slider", 0.0, 2.0, label_visibility="collapsed", key="lambda_value")
             col3.caption("重視")
             
             st.markdown("**不調への耐性 (γ)**")
             st.caption("**「深刻な不調」**に陥ることを、どれだけ避けたいですか？")
+            
+            # --- ▼▼▼ ここを修正 ▼▼▼ ---
             col1, col2, col3 = st.columns([1, 5, 1])
+            # --- ▲▲▲ ここまでを修正 ▲▲▲ ---
+
             col1.caption("許容")
-            col2.slider("gamma_slider", 0.0, 2.0, label_visibility="collapsed", key="gamma_value")
+            col2.slider("gamma_slider", 0.0, 2.0, label_visibility="collapsed", key="gamma_slider")
             col3.caption("最優先")
         
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
