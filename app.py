@@ -1533,7 +1533,7 @@ def main():
         st.sidebar.markdown("---")
         st.sidebar.header('🧭 あなたの羅針盤を調整する')
             
-        # --- 1. ペルソナ選択 ---
+        # --- 1. ペルソナ選択（フォームの外側） ---
         st.sidebar.subheader("1. あなたの幸福スタイル診断")
         st.sidebar.caption("まず、最も共感する「生き方の物語」を選んでみてください。")
         persona_options = {
@@ -1542,6 +1542,7 @@ def main():
             "情熱的なサーファー": "人生の価値は、最高の波に乗った瞬間の興奮で決まる...",
             "手動で調整": "これらの物語には当てはまらない。私は自分の手で全てのダイヤルを調整したい。"
         }
+        
         persona_presets = {
             "バランスの取れた庭師": {'alpha': 0.6, 'lambda': 0.5, 'gamma': 1.0},
             "着実な登山家":       {'alpha': 0.4, 'lambda': 1.0, 'gamma': 1.5},
@@ -1566,114 +1567,87 @@ def main():
         
         st.sidebar.markdown("---")
 
-        # --- 2. 羅針盤の微調整 ---
-        st.sidebar.subheader("2. あなたの羅針盤の微調整")
-        st.sidebar.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
+        # --- 2. 羅針盤の微調整と保存（フォームの内側） ---
+        with st.sidebar.form("value_form"):
+            st.subheader("2. あなたの羅針盤の微調整")
+            st.caption("選んだスタイルを基準に、あなたの感覚に合うように各ダイヤルを微調整しましょう。")
 
-        with st.sidebar.expander("▼ スタイルのダイヤル", expanded=True):
-            st.markdown("**幸福の哲学 (α)**")
-            st.caption("あなたの幸福は、**量（満足の総量）**と**質（価値観との一致）**のどちらをより重視しますか？")
-            
-            # --- ▼▼▼ ここを修正 ▼▼▼ ---
-            col1, col2, col3 = st.columns([1, 5, 1])
-            # --- ▲▲▲ ここを修正 ▲▲▲ ---
-            
-            col1.caption("質重視")
-            col2.slider("alpha_slider", 0.0, 1.0, label_visibility="collapsed", key="alpha_value")
-            col3.caption("量重視")
-
-            st.markdown("**安定性への感度 (λ)**")
-            st.caption("日々の気分の**「浮き沈み（変動）」**を、どれだけ不快に感じますか？")
-
-            # --- ▼▼▼ ここを修正 ▼▼▼ ---
-            col1, col2, col3 = st.columns([1, 5, 1])
-            # --- ▲▲▲ ここを修正 ▲▲▲ ---
-
-            col1.caption("許容")
-            col2.slider("lambda_slider", 0.0, 2.0, label_visibility="collapsed", key="lambda_value")
-            col3.caption("重視")
-            
-            st.markdown("**不調への耐性 (γ)**")
-            st.caption("**「深刻な不調」**に陥ることを、どれだけ避けたいですか？")
-            
-            # --- ▼▼▼ ここを修正 ▼▼▼ ---
-            col1, col2, col3 = st.columns([1, 5, 1])
-            # --- ▲▲▲ ここまでを修正 ▲▲▲ ---
-
-            col1.caption("許容")
-            col2.slider("gamma_slider", 0.0, 2.0, label_visibility="collapsed", key="gamma_slider")
-            col3.caption("最優先")
-        
-        with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
-            
-            # --- ▼▼▼ ここからが最終修正箇所 ▼▼▼ ---
-
-            # q_values辞書を更新するためのコールバック関数
-            def update_q_values(domain):
-                # スライダーのキー（q_slider_...）から値を取得し、
-                # session_stateの辞書（q_values）を更新する
-                st.session_state.q_values[domain] = st.session_state[f"q_slider_{domain}"]
-
-            # 各ドメインのスライダーを描画
-            for domain in DOMAINS:
-                st.slider(
-                    DOMAIN_NAMES_JP_DICT[domain], 0, 100,
-                    # valueには、必ずsession_stateの辞書から値を取得して渡す
-                    value=st.session_state.q_values.get(domain, 100 // len(DOMAINS)),
-                    # keyは、コールバック内で値を取得するための一意な名前
-                    key=f"q_slider_{domain}",
-                    # on_changeでコールバック関数を指定
-                    on_change=update_q_values,
-                    # argsで、どのドメインのスライダーかをコールバックに伝える
-                    args=(domain,)
-                )
-            
-            # 合計値の計算と表示（ここは変更なし）
-            q_total = sum(st.session_state.q_values.values())
-            st.metric(label="現在の合計値", value=q_total)
-            if q_total != 100:
-                st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
-            else:
-                st.success("合計は100です。更新準備OK！")
-            
-            # --- ▲▲▲ ここまでが最終修正箇所 ▲▲▲ ---
-
-        st.sidebar.markdown("---")
-        
-        # --- 3. 保存ボタン ---
-        if st.sidebar.button('🧭 羅針盤を更新・保存する', use_container_width=True):
-            q_total_final = sum(st.session_state.q_values.values())
-            if q_total_final != 100:
-                st.sidebar.error('価値観 (q_t) の合計が100になっていません。')
-            else:
-                # 保存ロジック
-                new_value_record = {
-                    'user_id': user_id, 
-                    'date': date.today(), 
-                    'record_timestamp': datetime.now(),
-                    'alpha': st.session_state.alpha_value,
-                    'lambda': st.session_state.lambda_value,
-                    'gamma': st.session_state.gamma_value
-                }
-                new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+            with st.expander("▼ スタイルのダイヤル", expanded=True):
                 
-                new_df_row = pd.DataFrame([new_value_record])
-                all_data_df_for_values = read_data('data', data_sheet_id)
-                all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
+                # --- ▼▼▼ UIデザインを維持したalphaスライダー ▼▼▼ ---
+                st.markdown("**幸福の哲学 (α)**")
+                st.caption("あなたの幸福は、**量（満足の総量）**と**質（価値観との一致）**のどちらをより重視しますか？")
+                col1, col2, col3 = st.columns([1, 5, 1])
+                col1.caption("質重視")
+                col2.slider("alpha_slider", 0.0, 1.0, label_visibility="collapsed", key="alpha_value")
+                col3.caption("量重視")
+
+                # --- ▼▼▼ UIデザインを維持したlambdaスライダー ▼▼▼ ---
+                st.markdown("**安定性への感度 (λ)**")
+                st.caption("日々の気分の**「浮き沈み（変動）」**を、どれだけ不快に感じますか？")
+                col1, col2, col3 = st.columns([1, 5, 1])
+                col1.caption("許容")
+                col2.slider("lambda_slider", 0.0, 2.0, label_visibility="collapsed", key="lambda_value")
+                col3.caption("重視")
                 
-                if 'date' in all_data_df_updated.columns:
-                    all_data_df_updated['date'] = pd.to_datetime(all_data_df_updated['date'], errors='coerce')
-                if 'record_timestamp' in all_data_df_updated.columns:
-                    all_data_df_updated['record_timestamp'] = pd.to_datetime(all_data_df_updated['record_timestamp'], errors='coerce')
-                all_data_df_updated = all_data_df_updated.sort_values(by=['user_id', 'record_timestamp']).reset_index(drop=True)
+                # --- ▼▼▼ UIデザインを維持したgammaスライダー ▼▼▼ ---
+                st.markdown("**不調への耐性 (γ)**")
+                st.caption("**「深刻な不調」**に陥ることを、どれだけ避けたいですか？")
+                col1, col2, col3 = st.columns([1, 5, 1])
+                col1.caption("許容")
+                col2.slider("gamma_slider", 0.0, 2.0, label_visibility="collapsed", key="gamma_value")
+                col3.caption("最優先")
+            
+            with st.expander("▼ 重要度のダイヤル", expanded=True):
+                # フォーム描画時点でのq_valuesを一時変数にコピーして合計を計算
+                current_q_values = {d: st.session_state[f"q_slider_input_{d}"] for d in DOMAINS} if f"q_slider_input_{DOMAINS[0]}" in st.session_state else st.session_state.q_values.copy()
                 
-                if write_data('data', data_sheet_id, all_data_df_updated):
-                    st.sidebar.success("羅針盤を更新しました！")
-                    st.balloons()
-                    time.sleep(1)
-                    st.rerun()
+                for domain in DOMAINS:
+                    st.slider(
+                        DOMAIN_NAMES_JP_DICT[domain], 0, 100,
+                        value=current_q_values.get(domain, 100 // len(DOMAINS)),
+                        key=f"q_slider_input_{domain}"
+                    )
+                
+                # 合計値はスライダーの現在の値からリアルタイムに計算して表示
+                q_total = sum(st.session_state[f"q_slider_input_{d}"] for d in DOMAINS)
+                st.metric(label="現在の合計値", value=q_total)
+                if q_total != 100:
+                    st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
                 else:
-                    st.sidebar.error("価値観の保存に失敗しました。")
+                    st.success("合計は100です。更新準備OK！")
+
+            st.markdown("---")
+            submitted_values = st.form_submit_button('🧭 羅針盤を更新・保存する', use_container_width=True)
+
+            if submitted_values:
+                st.session_state.q_values = {d: st.session_state[f"q_slider_input_{d}"] for d in DOMAINS}
+                q_total_final = sum(st.session_state.q_values.values())
+                
+                if q_total_final != 100:
+                    st.error('価値観 (q_t) の合計が100になっていません。')
+                else:
+                    new_value_record = {
+                        'user_id': user_id, 
+                        'date': date.today(), 
+                        'record_timestamp': datetime.now(),
+                        'alpha': st.session_state.alpha_value,
+                        'lambda': st.session_state.lambda_value,
+                        'gamma': st.session_state.gamma_value
+                    }
+                    new_value_record.update({f'q_{d}': v for d, v in st.session_state.q_values.items()})
+                    
+                    new_df_row = pd.DataFrame([new_value_record])
+                    all_data_df_for_values = read_data('data', data_sheet_id)
+                    all_data_df_updated = pd.concat([all_data_df_for_values, new_df_row], ignore_index=True)
+                    
+                    if write_data('data', data_sheet_id, all_data_df_updated):
+                        st.success("あなたの羅針盤を更新しました！")
+                        st.balloons()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("価値観の保存に失敗しました。")
         # --- ▲▲▲ ここまでが置き換え後のコード ▲▲▲ ---
         # --- メインコンテンツのタブ定義 ---
         # (...以降のtab1, tab2, tab3の中身は、以前の修正内容で問題ありません...)
