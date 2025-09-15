@@ -1478,27 +1478,28 @@ def main():
             sortable_df = user_data_df.dropna(subset=['record_timestamp']).copy()
             sortable_df = sortable_df.sort_values(by='record_timestamp', ascending=False)
         
-        # 最新のq_t設定を読み込む
+        # 最新のq_t設定を読み込む（これは変更なし）
         q_data_rows = sortable_df.dropna(subset=Q_COLS, how='all')
         if not q_data_rows.empty:
             latest_q_row = q_data_rows.iloc[0]
             latest_q_dict = latest_q_row[Q_COLS].to_dict()
             st.session_state.q_values = {key.replace('q_', ''): int(val) for key, val in latest_q_dict.items() if isinstance(val, (int, float)) and pd.notna(val)}
-        else: # --- ▼▼▼ このelseブロックを追加 ▼▼▼ ---
-            # もし、q_tの記録が一つもなければ、均等なデフォルト値を設定
+        else:
             st.session_state.q_values = {domain: 100 // len(DOMAINS) for domain in DOMAINS}
             st.session_state.q_values[DOMAINS[0]] += 100 % len(DOMAINS)
-                # --- ▲▲▲ このelseブロックを追加 ▲▲▲ ---
 
-        # --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+        # --- ▼▼▼ ここからが、抜け落ちていた読み込みロジック ▼▼▼ ---
+        
         # 最新のスタイルパラメータ(alpha, lambda, gamma)を読み込む
         style_params = ['alpha', 'lambda', 'gamma']
         for param in style_params:
             if param in sortable_df.columns:
+                # パラメータを含む行の中から、最新の有効な値を探す
                 param_data_rows = sortable_df.dropna(subset=[param])
                 if not param_data_rows.empty:
                     st.session_state[f'{param}_value'] = float(param_data_rows.iloc[0][param])
-        # --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
+        
+        # --- ▲▲▲ ここまでが、抜け落ちていた読み込みロジック ▲▲▲ ---
         
         st.session_state.auth_status = "LOGGED_IN_UNLOCKED"
         st.rerun()
@@ -1604,25 +1605,38 @@ def main():
             col3.caption("最優先")
         
         with st.sidebar.expander("▼ 重要度のダイヤル", expanded=True):
-            # q_values辞書を更新するためのコールバック
+            
+            # --- ▼▼▼ ここからが最終修正箇所 ▼▼▼ ---
+
+            # q_values辞書を更新するためのコールバック関数
             def update_q_values(domain):
+                # スライダーのキー（q_slider_...）から値を取得し、
+                # session_stateの辞書（q_values）を更新する
                 st.session_state.q_values[domain] = st.session_state[f"q_slider_{domain}"]
 
+            # 各ドメインのスライダーを描画
             for domain in DOMAINS:
                 st.slider(
                     DOMAIN_NAMES_JP_DICT[domain], 0, 100,
+                    # valueには、必ずsession_stateの辞書から値を取得して渡す
                     value=st.session_state.q_values.get(domain, 100 // len(DOMAINS)),
+                    # keyは、コールバック内で値を取得するための一意な名前
                     key=f"q_slider_{domain}",
+                    # on_changeでコールバック関数を指定
                     on_change=update_q_values,
+                    # argsで、どのドメインのスライダーかをコールバックに伝える
                     args=(domain,)
                 )
             
+            # 合計値の計算と表示（ここは変更なし）
             q_total = sum(st.session_state.q_values.values())
             st.metric(label="現在の合計値", value=q_total)
             if q_total != 100:
                 st.warning(f"合計が100になるように調整してください。 (現在: {q_total})")
             else:
                 st.success("合計は100です。更新準備OK！")
+            
+            # --- ▲▲▲ ここまでが最終修正箇所 ▲▲▲ ---
 
         st.sidebar.markdown("---")
         
